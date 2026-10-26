@@ -68,18 +68,18 @@
               <button class="secondary-button" data-jump="change-radar">See change impact</button>
             </div>
             <div class="hero-proof">
-              <div><strong>100%</strong><span>citation target</span></div>
-              <div><strong>6</strong><span>modality states</span></div>
+              <div><strong>100%</strong><span>evidence target</span></div>
+              <div><strong>5</strong><span>modality states</span></div>
               <div><strong>0</strong><span>silent guesses</span></div>
             </div>
           </div>
 
           <div class="hero-visual" aria-label="Interactive compliance pipeline preview">
-            <div class="visual-topline"><span>Live pipeline</span><span class="status-live">● READY</span></div>
+            <div class="visual-topline"><span>Illustrative workflow</span><span class="status-live">● DEMO</span></div>
             <div class="source-snippet"><span class="line-number">33.1</span><p>In the case of a personal data breach, the controller shall without undue delay and, where feasible, not later than <mark>72 hours</mark>…</p></div>
             <div class="compile-line"><span></span><b>compiles to</b><span></span></div>
             <div class="obligation-spec">
-              <div class="spec-head"><span>RT-EU-GDPR-33-1</span><i>0.97 confidence</i></div>
+              <div class="spec-head"><span>Example obligation</span><i>review required</i></div>
               <dl>
                 <div><dt>ACTOR</dt><dd>Data controller</dd></div>
                 <div><dt>ACTION</dt><dd>Notify supervisory authority</dd></div>
@@ -88,13 +88,13 @@
                 <div><dt>EXCEPTION</dt><dd>Unlikely risk to rights and freedoms</dd></div>
               </dl>
             </div>
-            <div class="trace-path"><span>Source v2026.10</span><b>→</b><span>Obligation</span><b>→</b><span>Policy</span><b>→</b><span>Human review</span></div>
+            <div class="trace-path"><span>Example source</span><b>→</b><span>Obligation</span><b>→</b><span>Policy</span><b>→</b><span>Human review</span></div>
           </div>
         </div>
 
         <div class="signal-strip">
           <span class="signal-label">SYSTEM SIGNAL</span>
-          <div class="ticker"><span>Exact source spans preserved</span><span>Constraint-aware comparison</span><span>Revision graph active</span><span>Human release gate enabled</span></div>
+          <div class="ticker"><span>Source clauses retained</span><span>Constraint-aware comparison</span><span>Revision graph active</span><span>Human review recorded</span></div>
         </div>
 
         <div class="section-heading">
@@ -215,7 +215,7 @@
         </div>
         <div class="story-grid">
           <article class="story-card"><span>01 / ACQUIRE</span><h2>Bring your own regulation</h2><p>Upload PDF, DOCX, TXT, or Markdown. RegulaTrace extracts selectable text locally and reports document statistics before analysis.</p><button class="text-button" data-jump="obligation-lab">Open ingestion →</button></article>
-          <article class="story-card"><span>02 / COMPILE</span><h2>Make every duty inspectable</h2><p>Each obligation carries an actor, action, modality, deadline, condition, exception, source identity, version, evidence span, confidence, and review state.</p><button class="text-button" data-jump="evidence-graph">Trace evidence →</button></article>
+          <article class="story-card"><span>02 / COMPILE</span><h2>Make every duty inspectable</h2><p>Each obligation carries an actor, action, modality, deadline, condition, exception, source identity, version, evidence clause, confidence, and review state.</p><button class="text-button" data-jump="evidence-graph">Trace evidence →</button></article>
           <article class="story-card"><span>03 / DECIDE</span><h2>Turn change into work</h2><p>Constraint-aware policy comparison catches deadline and polarity failures. Change Radar converts legal edits into a prioritized impact queue.</p><button class="text-button" data-jump="change-radar">Inspect impact →</button></article>
         </div>
         <div class="assurance-board">
@@ -231,12 +231,12 @@
         </div>
         <div class="metric-grid" id="metric-grid">
           <article class="metric-card"><span>Suite pass rate</span><strong id="metric-pass-rate">—</strong><div class="metric-bar"><i id="metric-pass-bar" style="--value:0%"></i></div><small>live executable cases</small></article>
-          <article class="metric-card"><span>Critical miss rate</span><strong id="metric-miss-rate">—</strong><div class="metric-bar danger"><i id="metric-miss-bar" style="--value:0%"></i></div><small>primary safety metric</small></article>
-          <article class="metric-card"><span>Provenance integrity</span><strong id="metric-provenance">—</strong><div class="metric-bar"><i id="metric-provenance-bar" style="--value:0%"></i></div><small>evidence anchor retained</small></article>
+          <article class="metric-card"><span>Critical miss rate</span><strong id="metric-miss-rate">—</strong><div class="metric-bar danger"><i id="metric-miss-bar" style="--value:0%"></i></div><small>labeled synthetic cases only</small></article>
+          <article class="metric-card"><span>Provenance integrity</span><strong id="metric-provenance">—</strong><div class="metric-bar"><i id="metric-provenance-bar" style="--value:0%"></i></div><small>synthetic evidence exact match</small></article>
           <article class="metric-card"><span>Executed cases</span><strong id="metric-cases">0</strong><div class="metric-bar"><i id="metric-cases-bar" style="--value:0%"></i></div><small>extraction + comparison + change</small></article>
         </div>
         <div class="evaluation-grid">
-          <article class="eval-panel"><div class="panel-head"><div><span class="panel-step">BASELINES</span><h2>Research comparison plan</h2></div><span class="status-chip">paper protocol</span></div><div class="chart" id="baseline-chart"></div></article>
+          <article class="eval-panel"><div class="panel-head"><div><span class="panel-step">BASELINES</span><h2>Research comparison plan</h2></div><span class="status-chip">planned</span></div><div class="chart" id="baseline-chart"></div></article>
           <article class="eval-panel"><div class="panel-head"><div><span class="panel-step">LIVE RESULTS</span><h2>Executable challenge suite</h2></div><span class="status-chip amber" id="benchmark-status">not run</span></div><div class="challenge-list" id="challenge-list"></div></article>
         </div>
         <div class="evaluation-matrix"><div class="panel-head"><div><span class="panel-step">MEASUREMENT PLAN</span><h2>End-to-end evaluation matrix</h2></div><span class="status-chip">reproducible</span></div><div class="table-wrap"><table><thead><tr><th>Task</th><th>Primary metric</th><th>Safety / diagnostic metric</th><th>Why it matters</th></tr></thead><tbody><tr><td>Candidate detection</td><td>Recall, precision</td><td>Critical miss by severity</td><td>A missed duty is invisible downstream</td></tr><tr><td>Field extraction</td><td>Exact + relaxed span F1</td><td>Unsupported-field rate</td><td>Every populated field must have evidence</td></tr><tr><td>Temporal reasoning</td><td>Value + anchor accuracy</td><td>Deadline without trigger</td><td>A duration without its start event is unsafe</td></tr><tr><td>Policy comparison</td><td>Macro F1 by outcome</td><td>Serious mismatch count</td><td>Similarity must not hide incompatibility</td></tr><tr><td>Change impact</td><td>Material-change F1</td><td>Downstream impact recall</td><td>Changes matter only through affected work</td></tr><tr><td>Human use</td><td>Median review time</td><td>Correction count + trust calibration</td><td>The tool succeeds only if it helps reviewers</td></tr></tbody></table></div></div>

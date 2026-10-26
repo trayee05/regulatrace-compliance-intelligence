@@ -36,13 +36,7 @@ const POLICY_SAMPLE = `The Privacy Office immediately escalates every suspected 
 const OLD_VERSION = `The organization shall review privileged user accounts at least once every 90 days. The security owner shall retain review evidence for twelve months. Exceptions may be approved by the Chief Information Security Officer.`;
 const NEW_VERSION = `The organization shall review privileged user accounts at least once every 60 days. The security owner shall retain review evidence for twenty-four months. Exceptions may be approved by the Chief Information Security Officer and must be revalidated every six months. Dormant privileged accounts must be disabled immediately.`;
 
-const baselineData = [
-  { label: "Majority class", value: 42 },
-  { label: "Ordered lexical rules", value: 70 },
-  { label: "Character n-gram SVM", value: 81 },
-  { label: "Legal encoder", value: 86 },
-  { label: "Hybrid RegulaTrace", value: 91 },
-];
+const baselineData = ["Majority class", "Ordered lexical rules", "Character n-gram SVM", "Legal encoder", "Hybrid RegulaTrace"];
 
 const challenges = [
   ["Scoped negation", "must not → PROHIBITION"],
@@ -67,7 +61,7 @@ const demoSteps = [
   { view: "obligation-lab", icon: "⌁", title: "Compile an obligation", copy: "Start with a source clause. RegulaTrace preserves the words, identifies the duty and creates a reviewable atomic record." },
   { view: "comparator", icon: "⇄", title: "Challenge the policy", copy: "Topic similarity is only the first layer. The comparator separately tests polarity, timing, actor, scope and exception compatibility." },
   { view: "change-radar", icon: "◌", title: "Trace a legal revision", copy: "A 90-day review becoming 60 days is not a cosmetic edit. The radar identifies material changes and the downstream work they create." },
-  { view: "evidence-graph", icon: "⌘", title: "Make the decision defensible", copy: "Every field carries a source span, version, transformation path, confidence and review state. The answer always has a path home." },
+  { view: "evidence-graph", icon: "⌘", title: "Make the decision defensible", copy: "Each record retains its evidence clause, source metadata, confidence and review state. The graph shows that review path." },
 ];
 
 const state = {
@@ -333,7 +327,7 @@ function renderAnalysis() {
     [data.obligationCount, "obligations"],
     [data.clauseCount, "source clauses"],
     [percentage(data.avgConfidence), "mean confidence"],
-    [percentage(data.citationIntegrity), "citation integrity"],
+    [percentage(data.citationIntegrity), "evidence retained"],
   ].map(([value, label]) => `<div class="summary-stat"><b>${escapeHtml(value)}</b><span>${label}</span></div>`).join("");
 
   container.innerHTML = state.analysis.records.map((record) => `
@@ -364,12 +358,49 @@ function renderDetail() {
   drawer.classList.add("open");
   const fields = [
     ["Actor", record.actor], ["Action", record.action], ["Deadline", record.deadline ?? "Not located"], ["Trigger / condition", record.condition ?? "Not located"],
-    ["Exception", record.exception ?? "Not located"], ["Authority", record.authority], ["Version", record.sourceVersion], ["Review state", record.reviewState],
+    ["Exception", record.exception ?? "Not located"], ["Authority", record.authority], ["Version", record.sourceVersion],
+    ["Source characters", record.sourceSpan ? `${record.sourceSpan.start + 1}–${record.sourceSpan.end}` : "Not located"], ["Review state", record.reviewState],
   ];
   drawer.innerHTML = `<div class="panel-head"><div><span class="panel-step">SELECTED RECORD</span><h2>${record.id}</h2></div><span class="modality ${record.modality}">${record.modality}</span></div>
     <div class="drawer-grid">${fields.map(([label, value]) => `<div class="drawer-field"><span>${label}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
     <blockquote class="evidence-quote">“${escapeHtml(record.evidence)}”</blockquote>
-    <div class="drawer-actions"><button class="primary-button small" data-review="CONFIRMED">Confirm record</button><button class="secondary-button small" data-review="CORRECTED">Mark corrected</button><button class="secondary-button small" data-review="REJECTED">Reject</button><button class="text-button" id="open-record-graph">Trace in graph →</button></div>`;
+    <div class="drawer-actions"><button class="primary-button small" data-review="CONFIRMED">Confirm record</button><button class="secondary-button small" id="edit-record">Correct fields</button><button class="secondary-button small" data-review="REJECTED">Reject</button><button class="text-button" id="open-record-graph">Trace in graph →</button></div>
+    <form id="correction-form" class="correction-form" hidden>
+      <p>Record a field correction. The source evidence stays unchanged and the before/after values go into the audit trail.</p>
+      <div class="correction-grid">
+        <label>Actor<input name="actor" value="${escapeHtml(record.actor)}" required></label>
+        <label>Action<input name="action" value="${escapeHtml(record.action)}" required></label>
+        <label>Modality<select name="modality">${["OBLIGATION", "PROHIBITION", "RECOMMENDATION", "PERMISSION", "INFORMATION"].map((value) => `<option value="${value}" ${record.modality === value ? "selected" : ""}>${value}</option>`).join("")}</select></label>
+        <label>Deadline<input name="deadline" value="${escapeHtml(record.deadline ?? "")}"></label>
+        <label>Condition<input name="condition" value="${escapeHtml(record.condition ?? "")}"></label>
+        <label>Exception<input name="exception" value="${escapeHtml(record.exception ?? "")}"></label>
+      </div>
+      <label>Reviewer<input name="reviewer" value="Presentation reviewer" required></label>
+      <label>Reason for correction<textarea name="note" rows="2" placeholder="What did the extraction miss or misread?"></textarea></label>
+      <button class="primary-button small" type="submit">Save correction</button>
+    </form>`;
+  $("#edit-record").addEventListener("click", () => { $("#correction-form").hidden = !$("#correction-form").hidden; });
+  $("#correction-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.analysis.analysisId || state.runtime.mode !== "backend") return toast("Connect FastAPI and save an analysis before correcting a record.", "Backend required");
+    const form = event.currentTarget;
+    const correctedFields = {};
+    for (const field of ["actor", "action", "modality", "deadline", "condition", "exception"]) {
+      const value = form.elements[field].value.trim() || null;
+      if (value !== (record[field] ?? null)) correctedFields[field] = value;
+    }
+    if (!Object.keys(correctedFields).length) return toast("Change at least one field before saving.", "No correction");
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      await requestApi("/api/reviews", { analysisId: state.analysis.analysisId, recordId: record.id, decision: "CORRECTED", reviewer: form.elements.reviewer.value.trim(), note: form.elements.note.value.trim() || null, correctedFields });
+      state.analysis = await requestApi(`/api/analyses/${state.analysis.analysisId}`);
+      state.selectedRecord = state.analysis.records.find((item) => item.id === record.id);
+      renderAnalysis(); renderGraph();
+      await refreshHistory(); await refreshDashboard();
+      toast(`Corrected fields and audit history saved for ${record.id}.`, "Review saved");
+    } catch (error) { submit.disabled = false; toast(error.message, "Correction failed"); }
+  });
   $$('[data-review]', drawer).forEach((button) => button.addEventListener("click", async () => {
     const decision = button.dataset.review;
     button.disabled = true;
@@ -515,13 +546,13 @@ function renderInspector(nodeId) {
   const [type, title, copy] = map[nodeId] ?? map.obligation;
   const inspector = $("#graph-inspector");
   inspector.innerHTML = `<span class="inspector-eyebrow">${type.toUpperCase()}</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p>
-    <div class="inspector-stack"><div class="inspector-field"><span>Source version</span><b>${escapeHtml(record.sourceVersion)}</b></div><div class="inspector-field"><span>Evidence anchor</span><b>${escapeHtml(record.sourceId)} · ${escapeHtml(record.section)}</b></div><div class="inspector-field"><span>Validation state</span><b>${record.unresolved.length ? `Review ${record.unresolved.join(", ")}` : "Schema complete"}</b></div><div class="inspector-field"><span>Transformation</span><b>${ENGINE_VERSION}</b></div></div>
+    <div class="inspector-stack"><div class="inspector-field"><span>Source version</span><b>${escapeHtml(record.sourceVersion)}</b></div><div class="inspector-field"><span>Evidence anchor</span><b>${escapeHtml(record.sourceId)} · ${escapeHtml(record.section)}${record.sourceSpan ? ` · chars ${record.sourceSpan.start + 1}–${record.sourceSpan.end}` : " · offset unavailable"}</b></div><div class="inspector-field"><span>Validation state</span><b>${record.unresolved.length ? `Review ${record.unresolved.join(", ")}` : "Schema complete"}</b></div><div class="inspector-field"><span>Transformation</span><b>${ENGINE_VERSION}</b></div></div>
     <div class="confidence-scale"><header><span>Field confidence</span><b>${percentage(record.confidence)}</b></header><div class="track"><i style="width:${percentage(record.confidence)}"></i></div></div>`;
   $$(".graph-node").forEach((node) => node.classList.toggle("active", node.dataset.node === nodeId));
 }
 
 function renderEvaluation() {
-  $("#baseline-chart").innerHTML = baselineData.map((item) => `<div class="bar-row"><span>${item.label}</span><div class="bar-track"><i style="--value:${item.value}%"></i></div><b>${item.value}%</b></div>`).join("");
+  $("#baseline-chart").innerHTML = `<p class="baseline-note">Planned baselines. Scores require a held-out annotated corpus; none are claimed here.</p>${baselineData.map((label) => `<div class="challenge-row"><span>${label}</span><i>PLANNED</i></div>`).join("")}`;
   $("#challenge-list").innerHTML = challenges.map(([name, behavior]) => `<div class="challenge-row"><span>${name}</span><i>${behavior}</i></div>`).join("");
   $("#roadmap").innerHTML = roadmap.map(([week, title, detail, color]) => `<article class="roadmap-phase" style="--accent:${color}"><span>WEEK ${week}</span><b>${title}</b><small>${detail}</small></article>`).join("");
 }

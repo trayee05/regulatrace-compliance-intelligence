@@ -22,6 +22,10 @@ EXTRACTION_CASES = [
     ("The organization shall test backups at least once every 90 days.", "OBLIGATION", "organization", "90 days"),
 ]
 
+# A critical miss is a missed or materially misread duty, serious policy mismatch,
+# or material version change. Other failed checks still lower the overall pass rate.
+CRITICAL_EXTRACTION_CASES = {2, 3, 7, 8, 9, 12}
+
 COMPARISON_CASES = [
     (
         "The controller shall notify the authority within 72 hours after awareness.",
@@ -49,8 +53,10 @@ def run_benchmark() -> dict[str, Any]:
         modality_ok = bool(record and record["modality"] == modality)
         actor_ok = actor_fragment is None or bool(record and actor_fragment.lower() in record["actor"].lower())
         deadline_ok = deadline_fragment is None or bool(record and record["deadline"] and deadline_fragment.lower() in record["deadline"].lower())
-        provenance_ok = bool(record and record["evidence"] == text and record["sourceId"].startswith("benchmark://"))
+        span = record["sourceSpan"] if record else None
+        provenance_ok = bool(record and span and text[span["start"]:span["end"]] == text and record["sourceId"].startswith("benchmark://"))
         passed = modality_ok and actor_ok and deadline_ok and provenance_ok
+        critical = index in CRITICAL_EXTRACTION_CASES
         extraction_results.append(
             {
                 "id": f"EX-{index:02d}",
@@ -58,15 +64,20 @@ def run_benchmark() -> dict[str, Any]:
                 "expected": modality,
                 "observed": record["modality"] if record else "MISSED",
                 "checks": {"modality": modality_ok, "actor": actor_ok, "deadline": deadline_ok, "provenance": provenance_ok},
+                "critical": critical,
+                "criticalMiss": critical and not (modality_ok and actor_ok and deadline_ok),
             }
         )
 
     comparison_results = []
     for index, (requirement, policy, expected) in enumerate(COMPARISON_CASES, start=1):
         result = compare_policy(requirement, policy)
-        comparison_results.append(
-            {"id": f"CP-{index:02d}", "passed": result["outcome"] == expected, "expected": expected, "observed": result["outcome"]}
-        )
+        critical = expected == "POTENTIAL_MISMATCH"
+        comparison_results.append({
+            "id": f"CP-{index:02d}", "passed": result["outcome"] == expected,
+            "expected": expected, "observed": result["outcome"],
+            "critical": critical, "criticalMiss": critical and result["outcome"] != expected,
+        })
 
     version_result = compare_versions(
         "The organization shall review accounts every 90 days.",
@@ -81,6 +92,8 @@ def run_benchmark() -> dict[str, Any]:
     provenance_integrity = sum(item["checks"]["provenance"] for item in extraction_results) / len(extraction_results)
     deadline_cases = [item for item, source in zip(extraction_results, EXTRACTION_CASES) if source[3] is not None]
     deadline_accuracy = sum(item["checks"]["deadline"] for item in deadline_cases) / len(deadline_cases)
+    critical_cases = [*extraction_results, *comparison_results, {"critical": True, "criticalMiss": not version_passed}]
+    critical_cases = [item for item in critical_cases if item["critical"]]
     return {
         "benchmark": "RegulaTrace transparent challenge suite v1",
         "datasetType": "synthetic-adversarial",
@@ -91,11 +104,12 @@ def run_benchmark() -> dict[str, Any]:
             "modalityAccuracy": modality_accuracy,
             "deadlineAccuracy": deadline_accuracy,
             "provenanceIntegrity": provenance_integrity,
-            "criticalMissRate": 1 - (passed / total),
+            "criticalMissRate": sum(item["criticalMiss"] for item in critical_cases) / len(critical_cases),
+            "criticalCaseCount": float(len(critical_cases)),
         },
         "suites": {
             "extraction": extraction_results,
             "comparison": comparison_results,
-            "versioning": [{"id": "VR-01", "passed": version_passed, "observedChanges": len(version_result["changes"])}],
+            "versioning": [{"id": "VR-01", "passed": version_passed, "observedChanges": len(version_result["changes"]), "critical": True, "criticalMiss": not version_passed}],
         },
     }

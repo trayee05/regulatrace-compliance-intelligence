@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-ENGINE_VERSION = "0.4.0-research"
+ENGINE_VERSION = "0.5.0-research"
 
 MODALITY_PATTERNS = [
     ("PROHIBITION", re.compile(r"\b(must\s+not|shall\s+not|may\s+not|is\s+prohibited\s+from|are\s+prohibited\s+from|is\s+forbidden\s+to)\b", re.I), 0.98),
@@ -30,7 +30,7 @@ DEADLINE_PATTERNS = [
     re.compile(r"\bbefore\s+[^,.;]+", re.I),
 ]
 
-CONDITION_RE = re.compile(r"\b(?:if|when|where|whenever|in\s+the\s+event\s+that|provided\s+that)\s+([^.;]+)", re.I)
+CONDITION_RE = re.compile(r"\b(?:if|when|where|whenever|in\s+the\s+event\s+that|provided\s+that)\s+([^,.;]+)", re.I)
 EXCEPTION_RE = re.compile(r"\b(?:unless|except(?:\s+where|\s+when|\s+for)?|save\s+where|other\s+than)\s+([^.;]+)", re.I)
 CROSS_REF_RE = re.compile(r"\b(?:Article|Section|Clause|Paragraph|Annex)\s+[A-Za-z0-9().-]+", re.I)
 SEVERITY_TERMS = re.compile(r"\b(?:breach|penalty|fine|sanction|suspend|revoke|incident|risk|harm|rights|security|safety)\b", re.I)
@@ -78,6 +78,27 @@ def segment_clauses(text: str = "") -> list[str]:
         numbered = [piece for piece in numbered if len(piece) >= 12]
         clauses.extend(numbered if len(numbered) > 1 else [part])
     return clauses
+
+
+def locate_clause_spans(text: str, clauses: list[str]) -> list[dict[str, int] | None]:
+    """Locate each normalized clause in order in the supplied source text.
+
+    Offsets use Unicode code points and an exclusive end. A missing match is
+    explicit; it must never be represented as a fabricated source location.
+    """
+    spans: list[dict[str, int] | None] = []
+    cursor = 0
+    for clause in clauses:
+        pattern = r"\s+".join(re.escape(token) for token in clause.split())
+        match = re.compile(pattern).search(text, cursor) if pattern else None
+        if match is None:
+            spans.append(None)
+            continue
+        start = match.start()
+        end = match.end()
+        spans.append({"start": start, "end": end})
+        cursor = end
+    return spans
 
 
 def classify_modality(clause: str = "") -> dict[str, Any]:
@@ -130,7 +151,19 @@ def derive_actor(clause: str, modality: dict[str, Any]) -> str:
 def derive_action(clause: str, modality: dict[str, Any]) -> str:
     if modality["index"] < 0:
         return strip_trailing_logic(clause)
-    after = clause[modality["index"] + len(modality["cue"]) :]
+    after = clause[modality["index"] + len(modality["cue"]) :].lstrip(" ,")
+    # Timing and feasibility qualifiers can precede the operative verb.
+    qualifiers = (
+        r"^without\s+undue\s+delay(?:\s+and)?\s*,?\s*",
+        r"^where\s+feasible\s*,\s*",
+        r"^(?:no|not)\s+later\s+than\s+\d+\s+(?:hours?|days?|weeks?|months?|years?)(?:\s+after\s+[^,.;]+)?\s*,\s*",
+    )
+    for _ in range(3):
+        previous = after
+        for pattern in qualifiers:
+            after = re.sub(pattern, "", after, count=1, flags=re.I)
+        if after == previous:
+            break
     return strip_trailing_logic(after) or "Unresolved action"
 
 
@@ -149,7 +182,9 @@ def confidence_for(record: dict[str, Any]) -> float:
 def extract_obligations(text: str = "", meta: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     metadata = meta or {}
     records: list[dict[str, Any]] = []
-    for index, clause in enumerate(segment_clauses(text)):
+    clauses = segment_clauses(text)
+    spans = locate_clause_spans(text, clauses)
+    for index, (clause, span) in enumerate(zip(clauses, spans)):
         modality = classify_modality(clause)
         condition_match = CONDITION_RE.search(clause)
         exception_match = EXCEPTION_RE.search(clause)
@@ -178,9 +213,10 @@ def extract_obligations(text: str = "", meta: dict[str, Any] | None = None) -> l
             "exception": exception,
             "crossReferences": cross_references,
             "evidence": clause,
+            "sourceSpan": span,
             "reviewState": "UNREVIEWED",
             "severity": "HIGH" if SEVERITY_TERMS.search(clause) else ("MEDIUM" if deadline else "STANDARD"),
-            "unresolved": (["actor"] if actor == "Unresolved actor" else []) + (["cross-reference-context"] if cross_references else []),
+            "unresolved": (["actor"] if actor == "Unresolved actor" else []) + (["cross-reference-context"] if cross_references else []) + (["source-span"] if span is None else []),
         }
         record["confidence"] = confidence_for(record)
         records.append(record)
@@ -195,7 +231,7 @@ def analyze_document(text: str = "", meta: dict[str, Any] | None = None) -> dict
     for record in records:
         counts[record["modality"]] = counts.get(record["modality"], 0) + 1
     avg_confidence = sum(record["confidence"] for record in normative) / len(normative) if normative else 0
-    citation_integrity = sum(1 for record in records if record["sourceId"] and record["evidence"]) / len(records) if records else 0
+    citation_integrity = sum(1 for record in records if record["sourceId"] and record["evidence"] and record["sourceSpan"]) / len(records) if records else 0
     timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     return {
         "engineVersion": ENGINE_VERSION,

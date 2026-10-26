@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class APIModel(BaseModel):
@@ -60,6 +60,11 @@ class VersionCompareRequest(APIModel):
 Modality = Literal["PROHIBITION", "OBLIGATION", "RECOMMENDATION", "PERMISSION", "INFORMATION"]
 
 
+class SourceSpan(APIModel):
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+
+
 class ObligationRecord(APIModel):
     id: str
     source_id: str = Field(alias="sourceId")
@@ -77,6 +82,7 @@ class ObligationRecord(APIModel):
     exception: str | None
     cross_references: list[str] = Field(alias="crossReferences")
     evidence: str
+    source_span: SourceSpan | None = Field(default=None, alias="sourceSpan")
     review_state: str = Field(alias="reviewState")
     severity: Literal["HIGH", "MEDIUM", "STANDARD"]
     unresolved: list[str]
@@ -165,6 +171,22 @@ class ReviewRequest(APIModel):
     decision: Literal["CONFIRMED", "CORRECTED", "REJECTED"]
     note: str | None = Field(default=None, max_length=2_000)
     reviewer: str = Field(default="Presentation reviewer", min_length=2, max_length=120)
+    corrected_fields: dict[Literal["actor", "action", "modality", "deadline", "condition", "exception"], str | None] = Field(default_factory=dict, alias="correctedFields")
+
+    @model_validator(mode="after")
+    def correction_must_change_fields(self) -> "ReviewRequest":
+        if self.decision == "CORRECTED" and not self.corrected_fields:
+            raise ValueError("a corrected review must supply correctedFields")
+        if self.decision != "CORRECTED" and self.corrected_fields:
+            raise ValueError("correctedFields are only accepted for a corrected review")
+        for field, value in self.corrected_fields.items():
+            if field in {"actor", "action", "modality"} and (value is None or not value.strip()):
+                raise ValueError(f"{field} cannot be empty")
+            if value is not None and len(value) > 2_000:
+                raise ValueError(f"{field} is too long")
+        if "modality" in self.corrected_fields and self.corrected_fields["modality"] not in {"PROHIBITION", "OBLIGATION", "RECOMMENDATION", "PERMISSION", "INFORMATION"}:
+            raise ValueError("modality is invalid")
+        return self
 
 
 class ReviewResponse(APIModel):
@@ -175,6 +197,7 @@ class ReviewResponse(APIModel):
     note: str | None
     created_at: str = Field(alias="createdAt")
     reviewed_count: int = Field(alias="reviewedCount")
+    changes: dict[str, dict[str, str | None]] = Field(default_factory=dict)
 
 
 class AnalysisHistoryItem(APIModel):
@@ -194,6 +217,7 @@ class AuditEvent(APIModel):
     note: str | None
     reviewer: str
     created_at: str = Field(alias="createdAt")
+    changes: dict[str, dict[str, str | None]] = Field(default_factory=dict)
 
 
 class DashboardResponse(APIModel):

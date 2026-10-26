@@ -21,10 +21,23 @@ test("extracts an evidence-linked deadline and exception", () => {
   const record = analysis.normative[0];
   assert.equal(record.modality, "OBLIGATION");
   assert.match(record.actor, /controller/i);
+  assert.match(record.action, /^notify the personal data breach/i);
+  assert.equal(record.condition, "feasible");
   assert.match(record.deadline, /72 hours/i);
   assert.match(record.exception, /unlikely/i);
   assert.equal(record.sourceId, "eur-lex://gdpr/33");
+  assert.equal(Array.from(gdpr).slice(record.sourceSpan.start, record.sourceSpan.end).join(""), record.evidence);
   assert.equal(analysis.summary.citationIntegrity, 1);
+});
+
+test("locates repeated clauses after Unicode text without reusing the first span", () => {
+  const source = "🧭 Context heading.\nThe provider must retain logs.\nThe provider must retain logs.";
+  const duties = analyzeDocument(source).normative;
+  assert.equal(duties.length, 2);
+  assert.ok(duties[0].sourceSpan.end < duties[1].sourceSpan.start);
+  for (const duty of duties) {
+    assert.equal(Array.from(source).slice(duty.sourceSpan.start, duty.sourceSpan.end).join(""), duty.evidence);
+  }
 });
 
 test("flags a slower policy deadline as a mismatch", () => {

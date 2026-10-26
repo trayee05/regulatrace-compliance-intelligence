@@ -149,13 +149,17 @@ def analysis_detail(analysis_id: str) -> dict[str, Any]:
 
 @app.post("/api/reviews", response_model=ReviewResponse, responses=ERROR_RESPONSES, tags=["Cases"])
 def review(request: ReviewRequest) -> dict[str, Any]:
-    event = record_review(
-        request.analysis_id,
-        request.record_id,
-        request.decision,
-        request.note,
-        request.reviewer,
-    )
+    try:
+        event = record_review(
+            request.analysis_id,
+            request.record_id,
+            request.decision,
+            request.note,
+            request.reviewer,
+            request.corrected_fields,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_CORRECTION", "message": str(exc)}) from exc
     if event is None:
         raise HTTPException(status_code=404, detail={"code": "RECORD_NOT_FOUND", "message": "The analysis or obligation record does not exist."})
     return event

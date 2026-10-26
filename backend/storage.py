@@ -50,10 +50,13 @@ def _connect() -> sqlite3.Connection:
             note TEXT,
             reviewer TEXT NOT NULL,
             created_at TEXT NOT NULL,
+            changes TEXT NOT NULL DEFAULT '{}',
             FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE
         );
         """
     )
+    if "changes" not in {column["name"] for column in connection.execute("PRAGMA table_info(audit_events)")}:
+        connection.execute("ALTER TABLE audit_events ADD COLUMN changes TEXT NOT NULL DEFAULT '{}'")
     return connection
 
 
@@ -121,31 +124,48 @@ def record_review(
     decision: str,
     note: str | None,
     reviewer: str,
+    corrected_fields: dict[str, str | None] | None = None,
 ) -> dict[str, Any] | None:
-    payload = get_analysis(analysis_id)
-    if payload is None:
-        return None
-    located = False
-    for collection_name in ("records", "normative"):
-        for record in payload.get(collection_name) or []:
-            if record.get("id") == record_id:
-                record["reviewState"] = decision
-                located = True
-    if not located:
-        return None
-    reviewed_count = sum(1 for record in payload.get("records") or [] if record.get("reviewState") != "UNREVIEWED")
-    created_at = _utc_now()
+    corrected_fields = corrected_fields or {}
     with _connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute("SELECT payload FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(row["payload"])
+        matches = [record for name in ("records", "normative") for record in payload.get(name) or [] if record.get("id") == record_id]
+        if not matches:
+            return None
+        changes = {field: {"before": matches[0].get(field), "after": value} for field, value in corrected_fields.items() if matches[0].get(field) != value}
+        if decision == "CORRECTED" and not changes:
+            raise ValueError("A correction must change at least one field.")
+        for record in matches:
+            record.update({field: change["after"] for field, change in changes.items()})
+            record["reviewState"] = decision
+            if "actor" in changes:
+                unresolved = [field for field in record.get("unresolved", []) if field != "actor"]
+                if record["actor"] == "Unresolved actor":
+                    unresolved.append("actor")
+                record["unresolved"] = unresolved
+        payload["normative"] = [record.copy() for record in payload.get("records") or [] if record["modality"] != "INFORMATION"]
+        counts: dict[str, int] = {}
+        for record in payload.get("records") or []:
+            counts[record["modality"]] = counts.get(record["modality"], 0) + 1
+        payload["summary"]["modalityCounts"] = counts
+        payload["summary"]["obligationCount"] = counts.get("OBLIGATION", 0)
+        payload["summary"]["unresolvedCount"] = sum(bool(record.get("unresolved")) for record in payload.get("records") or [])
+        reviewed_count = sum(1 for record in payload.get("records") or [] if record.get("reviewState") != "UNREVIEWED")
+        created_at = _utc_now()
         connection.execute(
-            "UPDATE analyses SET reviewed_count = ?, payload = ? WHERE id = ?",
-            (reviewed_count, json.dumps(payload, ensure_ascii=False), analysis_id),
+            "UPDATE analyses SET reviewed_count = ?, unresolved_count = ?, payload = ? WHERE id = ?",
+            (reviewed_count, payload["summary"]["unresolvedCount"], json.dumps(payload, ensure_ascii=False), analysis_id),
         )
         connection.execute(
             """
-            INSERT INTO audit_events (analysis_id, record_id, decision, note, reviewer, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO audit_events (analysis_id, record_id, decision, note, reviewer, created_at, changes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (analysis_id, record_id, decision, note, reviewer, created_at),
+            (analysis_id, record_id, decision, note, reviewer, created_at, json.dumps(changes, ensure_ascii=False)),
         )
     return {
         "analysisId": analysis_id,
@@ -155,6 +175,7 @@ def record_review(
         "note": note,
         "createdAt": created_at,
         "reviewedCount": reviewed_count,
+        "changes": changes,
     }
 
 
@@ -162,7 +183,7 @@ def audit_trail(analysis_id: str, limit: int = 100) -> list[dict[str, Any]]:
     with _connect() as connection:
         rows = connection.execute(
             """
-            SELECT record_id, decision, note, reviewer, created_at
+            SELECT record_id, decision, note, reviewer, created_at, changes
             FROM audit_events WHERE analysis_id = ? ORDER BY id DESC LIMIT ?
             """,
             (analysis_id, limit),
@@ -174,6 +195,7 @@ def audit_trail(analysis_id: str, limit: int = 100) -> list[dict[str, Any]]:
             "note": row["note"],
             "reviewer": row["reviewer"],
             "createdAt": row["created_at"],
+            "changes": json.loads(row["changes"]),
         }
         for row in rows
     ]

@@ -8,7 +8,8 @@ Current milestone: Presentation Edition — integrated full-stack research demon
 - FastAPI and frontend run together at `http://127.0.0.1:8000`.
 - Backend integration tests and JavaScript engine tests cover extraction, comparison, version analysis, and change explanations.
 - The executable challenge suite passed 16 of 16 transparent synthetic-adversarial cases, with 0% critical misses on that suite.
-- Browser verification completed the live story, rendered three evidence-linked obligations, persisted one analysis and one reviewer decision, restored the case history, and produced no console errors.
+- Browser verification rendered three evidence-linked obligations, persisted a field correction, restored the reviewed case, and confirmed its before/after audit event.
+- Backend and research tests passed locally (20 tests); JavaScript engine tests passed (8 tests). [CI passed on the fork branch](https://github.com/lakshitsachdeva/regulatrace-compliance-intelligence/actions/runs/40361949647); the upstream draft PR has not reported checks.
 
 ## Implemented
 
@@ -24,21 +25,25 @@ Current milestone: Presentation Edition — integrated full-stack research demon
 - Static frontend served by FastAPI so the full project uses one local server.
 - Deterministic Python implementation compatible with the existing JavaScript response structure.
 - SQLite persistence for analyses, extracted records, reviewer decisions, and audit events.
+- Reviewer field corrections store before/after values and preserve the original evidence clause.
 - Case history, case restoration, live dashboard totals, and decision-state aggregation.
 - Text extraction from text-based PDF, DOCX, TXT, and Markdown uploads, with file type, size, and extraction validation.
 
 ### Analysis and evaluation
 
-- Evidence-linked obligation extraction with actor, action, modality, deadlines, conditions, exceptions, references, confidence, unresolved fields, and source spans.
+- Evidence-linked obligation extraction with actor, action, modality, deadlines, conditions, exceptions, references, confidence, unresolved fields, and exact character offsets into the supplied text.
 - Constraint-level policy comparison with an explicit verdict and dimension-by-dimension evidence.
 - Old/new regulatory version comparison with added, removed, and modified clause classification.
 - Change explanations that state the observed edit, a possible rationale when wording supports one, and an operational action to review. Unknown motives are labeled as such.
 - Executable 16-case transparent challenge suite covering extraction, modality, actor, deadlines, provenance, policy comparison, and versioning.
+- Held-out JSONL evaluation harness validates gold offsets and split leakage, then reports detection F1, matched modality accuracy, critical misses, provenance errors, and an error list. No held-out corpus is bundled.
+- Exploratory external sentence-classification experiments now compare the rules with TF-IDF logistic regression and SVM baselines on two independently released EU datasets. The scripts, cleaning audit, fold metrics, and figures are in `research/experiments/`; these do not measure full obligation-span extraction.
 - Persistent human review decisions: confirmed, corrected, and rejected.
 
 ### Delivery and quality
 
 - One-click Windows launcher and clean shutdown script.
+- Foreground macOS/Linux launcher that creates a virtual environment and starts the local server.
 - Automatic environment creation, dependency checking, server startup, health validation, and browser opening.
 - Backend tests, JavaScript tests, and JavaScript syntax validation.
 - A two-page fictional demonstration regulation in `examples/` for document upload.
@@ -55,6 +60,8 @@ These boundaries do not prevent the presentation workflow from running; they def
 - Policy comparison and version alignment remain lexical and constraint-based; the interface deliberately exposes uncertainty instead of claiming legal certainty.
 - Change rationales are textual inferences, not evidence of the regulator's actual intent; official explanatory material is not ingested automatically.
 - The included benchmark is transparent and synthetic-adversarial, not an external peer-reviewed legal corpus. Paper claims should be based on a separately annotated, document-level held-out dataset with inter-annotator agreement.
+- The held-out evaluator and annotation protocol are implemented, but there is no annotated document corpus or inter-annotator agreement result yet.
+- The `citationIntegrity` field checks evidence, source-ID, and located source-span presence; source authority and PDF page coordinates are not verified.
 - The application supports decision review and evidence traceability but is not legal advice, a compliance certificate, or an autonomous release authority.
 
 ## Paper-ready next study

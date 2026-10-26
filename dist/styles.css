@@ -190,6 +190,14 @@ em { color: var(--mint-dark); font-style: normal; }
 .progress-steps { display: flex; justify-content: space-between; color: #8d9aa5; font: 7px DM Mono, monospace; margin-top: 7px; text-transform: uppercase; }
 .icon-button { width: 35px; height: 35px; border: 1px solid var(--line); background: white; border-radius: 8px; font-size: 18px; }
 .icon-button:hover { background: var(--paper); }
+.correction-form { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fafbfb; display: grid; gap: 12px; }
+.correction-form[hidden] { display: none; }
+.correction-form p { margin: 0; color: var(--muted); font-size: 12px; }
+.baseline-note { margin: 0 0 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.correction-form label { display: grid; gap: 5px; color: var(--slate); font-size: 11px; font-weight: 600; }
+.correction-form input, .correction-form select, .correction-form textarea { min-width: 0; width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: white; color: var(--ink); font: inherit; }
+.correction-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 680px) { .correction-grid { grid-template-columns: 1fr; } }
 .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
 .summary-stat { padding: 11px; border: 1px solid var(--soft-line); border-radius: 9px; background: #fafbfb; }
 .summary-stat b, .summary-stat span { display: block; }

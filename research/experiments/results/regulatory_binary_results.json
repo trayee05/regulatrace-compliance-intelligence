@@ -1,0 +1,259 @@
+{
+  "dataset": "https://doi.org/10.5281/zenodo.8200001",
+  "dataset_sha256": "510468c8eb682a4b6f98984a7221a0a157e9a323c4893a0d49723acfa2b16238",
+  "task_scope": "sentence-level regulatory versus constitutive statement; any RegulaTrace normative output mapped to regulatory",
+  "cleaning": "normalize whitespace, deduplicate exact text, exclude text with discordant labels, group folds by CELEX",
+  "audit": {
+    "raw_rows": 7240,
+    "unique_texts_after_deduplication": 5831,
+    "discordant_text_groups_excluded": 269,
+    "source_count": 379,
+    "class_support": {
+      "constitutive": 3337,
+      "regulatory": 2494
+    },
+    "shall_count": 5776
+  },
+  "split": "3-fold StratifiedGroupKFold by CELEX, seed 42",
+  "versions": {
+    "python": "3.12.13",
+    "scikit_learn": "1.5.2",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "matplotlib": "3.9.4",
+    "regulatrace_engine": "0.5.0-research"
+  },
+  "models": {
+    "RegulaTrace rules": {
+      "folds": [
+        {
+          "n": 1952,
+          "regulatory_support": 864,
+          "accuracy": 0.4426229508196721,
+          "regulatory_precision": 0.4426229508196721,
+          "regulatory_recall": 1.0,
+          "regulatory_f1": 0.6136363636363636
+        },
+        {
+          "n": 1578,
+          "regulatory_support": 536,
+          "accuracy": 0.3403041825095057,
+          "regulatory_precision": 0.3398858592263792,
+          "regulatory_recall": 1.0,
+          "regulatory_f1": 0.5073355418835779
+        },
+        {
+          "n": 2301,
+          "regulatory_support": 1094,
+          "accuracy": 0.47544545849630593,
+          "regulatory_precision": 0.47544545849630593,
+          "regulatory_recall": 1.0,
+          "regulatory_f1": 0.6444771723122239
+        }
+      ],
+      "accuracy_mean": 0.4194575306084946,
+      "accuracy_sd": 0.07048594639362835,
+      "regulatory_f1_mean": 0.5884830259440551,
+      "regulatory_f1_sd": 0.07194772058206092,
+      "accuracy_oof": 0.4278854398902418,
+      "regulatory_precision_oof": 0.42778730703259005,
+      "regulatory_recall_oof": 1.0,
+      "regulatory_f1_oof": 0.5992311388755406,
+      "confusion_matrix": [
+        [
+          1,
+          3336
+        ],
+        [
+          0,
+          2494
+        ]
+      ]
+    },
+    "Majority": {
+      "folds": [
+        {
+          "n": 1952,
+          "regulatory_support": 864,
+          "accuracy": 0.5573770491803278,
+          "regulatory_precision": 0.0,
+          "regulatory_recall": 0.0,
+          "regulatory_f1": 0.0
+        },
+        {
+          "n": 1578,
+          "regulatory_support": 536,
+          "accuracy": 0.6603295310519645,
+          "regulatory_precision": 0.0,
+          "regulatory_recall": 0.0,
+          "regulatory_f1": 0.0
+        },
+        {
+          "n": 2301,
+          "regulatory_support": 1094,
+          "accuracy": 0.5245545415036941,
+          "regulatory_precision": 0.0,
+          "regulatory_recall": 0.0,
+          "regulatory_f1": 0.0
+        }
+      ],
+      "accuracy_mean": 0.5807537072453287,
+      "accuracy_sd": 0.07084181712395733,
+      "regulatory_f1_mean": 0.0,
+      "regulatory_f1_sd": 0.0,
+      "accuracy_oof": 0.5722860572800549,
+      "regulatory_precision_oof": 0.0,
+      "regulatory_recall_oof": 0.0,
+      "regulatory_f1_oof": 0.0,
+      "confusion_matrix": [
+        [
+          3337,
+          0
+        ],
+        [
+          2494,
+          0
+        ]
+      ]
+    },
+    "Word TF-IDF + LR": {
+      "folds": [
+        {
+          "n": 1952,
+          "regulatory_support": 864,
+          "accuracy": 0.8575819672131147,
+          "regulatory_precision": 0.9138418079096046,
+          "regulatory_recall": 0.7488425925925926,
+          "regulatory_f1": 0.8231552162849872
+        },
+        {
+          "n": 1578,
+          "regulatory_support": 536,
+          "accuracy": 0.8409378960709759,
+          "regulatory_precision": 0.8145695364238411,
+          "regulatory_recall": 0.6884328358208955,
+          "regulatory_f1": 0.7462082912032356
+        },
+        {
+          "n": 2301,
+          "regulatory_support": 1094,
+          "accuracy": 0.8039982616253802,
+          "regulatory_precision": 0.8777908343125734,
+          "regulatory_recall": 0.6828153564899452,
+          "regulatory_f1": 0.7681233933161954
+        }
+      ],
+      "accuracy_mean": 0.8341727083031568,
+      "accuracy_sd": 0.02742497402512239,
+      "regulatory_f1_mean": 0.7791623002681395,
+      "regulatory_f1_sd": 0.03964341584556548,
+      "accuracy_oof": 0.8319327731092437,
+      "regulatory_precision_oof": 0.8762425447316103,
+      "regulatory_recall_oof": 0.7068965517241379,
+      "regulatory_f1_oof": 0.7825122059476254,
+      "confusion_matrix": [
+        [
+          3088,
+          249
+        ],
+        [
+          731,
+          1763
+        ]
+      ]
+    },
+    "Word TF-IDF + SVM": {
+      "folds": [
+        {
+          "n": 1952,
+          "regulatory_support": 864,
+          "accuracy": 0.8801229508196722,
+          "regulatory_precision": 0.9059278350515464,
+          "regulatory_recall": 0.8136574074074074,
+          "regulatory_f1": 0.8573170731707317
+        },
+        {
+          "n": 1578,
+          "regulatory_support": 536,
+          "accuracy": 0.8472750316856781,
+          "regulatory_precision": 0.7991886409736308,
+          "regulatory_recall": 0.7350746268656716,
+          "regulatory_f1": 0.7657920310981535
+        },
+        {
+          "n": 2301,
+          "regulatory_support": 1094,
+          "accuracy": 0.8292046936114733,
+          "regulatory_precision": 0.8677859391395593,
+          "regulatory_recall": 0.7559414990859232,
+          "regulatory_f1": 0.8080117244748413
+        }
+      ],
+      "accuracy_mean": 0.8522008920389412,
+      "accuracy_sd": 0.025814052460723037,
+      "regulatory_f1_mean": 0.8103736095812422,
+      "regulatory_f1_sd": 0.04580821113663662,
+      "accuracy_oof": 0.851140456182473,
+      "regulatory_precision_oof": 0.8658865886588659,
+      "regulatory_recall_oof": 0.7714514835605453,
+      "regulatory_f1_oof": 0.8159457167090755,
+      "confusion_matrix": [
+        [
+          3039,
+          298
+        ],
+        [
+          570,
+          1924
+        ]
+      ]
+    },
+    "Char TF-IDF + SVM": {
+      "folds": [
+        {
+          "n": 1952,
+          "regulatory_support": 864,
+          "accuracy": 0.8586065573770492,
+          "regulatory_precision": 0.8721518987341772,
+          "regulatory_recall": 0.7974537037037037,
+          "regulatory_f1": 0.8331318016928658
+        },
+        {
+          "n": 1578,
+          "regulatory_support": 536,
+          "accuracy": 0.8219264892268695,
+          "regulatory_precision": 0.7718550106609808,
+          "regulatory_recall": 0.6753731343283582,
+          "regulatory_f1": 0.7203980099502487
+        },
+        {
+          "n": 2301,
+          "regulatory_support": 1094,
+          "accuracy": 0.8074750108648414,
+          "regulatory_precision": 0.8291203235591507,
+          "regulatory_recall": 0.7495429616087751,
+          "regulatory_f1": 0.7873259721555449
+        }
+      ],
+      "accuracy_mean": 0.8293360191562534,
+      "accuracy_sd": 0.026358767279850974,
+      "regulatory_f1_mean": 0.7802852612662199,
+      "regulatory_f1_sd": 0.05669572874156603,
+      "accuracy_oof": 0.8285028297033099,
+      "regulatory_precision_oof": 0.8322953736654805,
+      "regulatory_recall_oof": 0.7502004811547714,
+      "regulatory_f1_oof": 0.7891185153943484,
+      "confusion_matrix": [
+        [
+          2960,
+          377
+        ],
+        [
+          623,
+          1871
+        ]
+      ]
+    }
+  },
+  "best_learned_by_regulatory_f1": "Word TF-IDF + SVM"
+}

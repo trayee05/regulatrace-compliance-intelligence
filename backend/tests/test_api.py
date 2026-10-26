@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.engine import analyze_document
 from backend.main import app
 
 
@@ -26,7 +27,7 @@ def test_health_exposes_engine_version() -> None:
         "status": "ok",
         "service": "regulatrace-api",
         "phase": "presentation-edition",
-        "engineVersion": "0.4.0-research",
+        "engineVersion": "0.5.0-research",
     }
 
 
@@ -58,12 +59,25 @@ def test_analyze_preserves_frontend_contract_and_metadata() -> None:
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["engineVersion"] == "0.4.0-research"
+    assert payload["engineVersion"] == "0.5.0-research"
     assert payload["source"]["sourceId"] == "eur-lex://gdpr/33"
     assert payload["summary"]["citationIntegrity"] == 1
     assert payload["normative"][0]["modality"] == "OBLIGATION"
+    assert payload["normative"][0]["action"].startswith("notify the personal data breach")
+    assert payload["normative"][0]["condition"] == "feasible"
     assert "72 hours" in payload["normative"][0]["deadline"]
     assert "unlikely" in payload["normative"][0]["exception"]
+    span = payload["normative"][0]["sourceSpan"]
+    assert GDPR[span["start"]:span["end"]] == payload["normative"][0]["evidence"]
+
+
+def test_source_spans_are_ordered_and_use_unicode_code_points() -> None:
+    source = "🧭 Context heading.\nThe provider must retain logs.\nThe provider must retain logs."
+    records = analyze_document(source)["records"]
+    duty_spans = [record["sourceSpan"] for record in records if record["modality"] == "OBLIGATION"]
+    assert len(duty_spans) == 2
+    assert duty_spans[0]["end"] < duty_spans[1]["start"]
+    assert all(source[span["start"]:span["end"]] == "The provider must retain logs." for span in duty_spans)
 
 
 def test_compare_flags_slower_policy_deadline() -> None:
@@ -182,6 +196,42 @@ def test_persisted_analysis_can_be_reviewed_and_restored() -> None:
     assert audit.json()[0]["reviewer"] == "Test reviewer"
 
 
+def test_correction_updates_record_and_preserves_source_evidence() -> None:
+    created = client.post("/api/analyze", json={"text": GDPR, "persist": True}).json()
+    record = created["records"][0]
+    corrected = client.post("/api/reviews", json={
+        "analysisId": created["analysisId"], "recordId": record["id"],
+        "decision": "CORRECTED", "reviewer": "Analyst", "note": "Verified against source",
+        "correctedFields": {"actor": "data controller", "deadline": "within 72 hours after awareness"},
+    })
+    assert corrected.status_code == 200
+    changes = corrected.json()["changes"]
+    assert changes["actor"] == {"before": record["actor"], "after": "data controller"}
+    restored = client.get(f"/api/analyses/{created['analysisId']}").json()
+    assert restored["records"][0]["actor"] == "data controller"
+    assert restored["normative"][0]["actor"] == "data controller"
+    assert restored["records"][0]["evidence"] == record["evidence"]
+    assert restored["records"][0]["reviewState"] == "CORRECTED"
+    audit = client.get(f"/api/analyses/{created['analysisId']}/audit").json()
+    assert audit[0]["changes"] == changes
+    assert audit[0]["note"] == "Verified against source"
+
+
+def test_correction_requires_a_real_field_change() -> None:
+    created = client.post("/api/analyze", json={"text": GDPR, "persist": True}).json()
+    record = created["records"][0]
+    missing = client.post("/api/reviews", json={
+        "analysisId": created["analysisId"], "recordId": record["id"], "decision": "CORRECTED",
+    })
+    unchanged = client.post("/api/reviews", json={
+        "analysisId": created["analysisId"], "recordId": record["id"], "decision": "CORRECTED",
+        "correctedFields": {"actor": record["actor"]},
+    })
+    assert missing.status_code == 422
+    assert unchanged.status_code == 422
+    assert client.get(f"/api/analyses/{created['analysisId']}/audit").json() == []
+
+
 def test_executable_evaluation_reports_transparent_case_results() -> None:
     response = client.get("/api/evaluate")
     assert response.status_code == 200
@@ -190,6 +240,9 @@ def test_executable_evaluation_reports_transparent_case_results() -> None:
     assert payload["executedCases"] == 16
     assert payload["passedCases"] <= payload["executedCases"]
     assert 0 <= payload["metrics"]["criticalMissRate"] <= 1
+    critical = [item for suite in payload["suites"].values() for item in suite if item["critical"]]
+    assert payload["metrics"]["criticalCaseCount"] == len(critical)
+    assert payload["metrics"]["criticalMissRate"] == sum(item["criticalMiss"] for item in critical) / len(critical)
 
 
 def test_fastapi_serves_the_presentation_frontend() -> None:
