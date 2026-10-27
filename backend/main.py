@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.engine import ENGINE_VERSION, analyze_document
+from backend.contradictions import EXAMPLES, analyze_contradiction
 from backend.evaluation import run_benchmark
 from backend.ingestion import IngestionError, extract_document
 from backend.hybrid import compare_policy_hybrid, compare_versions_hybrid
@@ -27,6 +28,11 @@ from backend.schemas import (
     BenchmarkResponse,
     CompareRequest,
     ComparisonResponse,
+    ContradictionExample,
+    ContradictionRequest,
+    ContradictionResponse,
+    SourcePrecisionRequest,
+    SourcePrecisionResponse,
     DashboardResponse,
     ErrorResponse,
     HealthResponse,
@@ -53,7 +59,8 @@ app = FastAPI(
     description=(
         "Presentation-ready evidence-linked regulatory obligation extraction, "
         "document ingestion, policy comparison, version change analysis, persistent "
-        "human review, audit trails, optional local Legal-BERT semantic retrieval, and executable evaluation."
+        "human review, audit trails, optional local Legal-BERT semantic retrieval, "
+        "Indian-law contradiction analysis with scoped graph facts and Z3 proofs, and executable evaluation."
     ),
     version="2.0.0-presentation",
     docs_url="/api/docs",
@@ -123,6 +130,23 @@ def compare(request: CompareRequest) -> dict[str, Any]:
 @app.post("/api/versions/compare", response_model=VersionCompareResponse, responses=ERROR_RESPONSES, tags=["Analysis"])
 def versions_compare(request: VersionCompareRequest) -> dict[str, Any]:
     return compare_versions_hybrid(request.old_text, request.new_text)
+
+
+@app.get("/api/contradictions/examples", response_model=list[ContradictionExample], tags=["Contradictions"])
+def contradiction_examples() -> list[dict[str, Any]]:
+    return EXAMPLES
+
+
+@app.post("/api/contradictions/analyze", response_model=ContradictionResponse, responses=ERROR_RESPONSES, tags=["Contradictions"])
+def contradictions_analyze(request: ContradictionRequest) -> dict[str, Any]:
+    return analyze_contradiction(request)
+
+
+@app.post("/api/contradictions/score-sources", response_model=SourcePrecisionResponse, responses=ERROR_RESPONSES, tags=["Contradictions"])
+async def contradictions_score_sources(request: SourcePrecisionRequest) -> dict[str, Any]:
+    from backend.ragas_bridge import score_source_ids
+
+    return await score_source_ids(request.retrieved_context_ids, request.reference_context_ids)
 
 
 @app.post("/api/documents/ingest", response_model=IngestResponse, responses=ERROR_RESPONSES, tags=["Documents"])

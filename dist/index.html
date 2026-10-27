@@ -31,6 +31,7 @@
         <a class="nav-item" href="#executive" data-nav="executive"><span class="nav-icon">◆</span><span>Executive Brief</span></a>
         <a class="nav-item" href="#obligation-lab" data-nav="obligation-lab"><span class="nav-icon">⌁</span><span>Obligation Lab</span><kbd>1</kbd></a>
         <a class="nav-item" href="#comparator" data-nav="comparator"><span class="nav-icon">⇄</span><span>Policy Comparator</span><kbd>2</kbd></a>
+        <a class="nav-item" href="#contradiction-lab" data-nav="contradiction-lab"><span class="nav-icon">⚖</span><span>Contradiction Lab</span></a>
         <a class="nav-item" href="#change-radar" data-nav="change-radar"><span class="nav-icon">◌</span><span>Change Radar</span><kbd>3</kbd></a>
         <a class="nav-item" href="#evidence-graph" data-nav="evidence-graph"><span class="nav-icon">⌘</span><span>Evidence Graph</span><kbd>4</kbd></a>
 
@@ -65,6 +66,7 @@
             <p>RegulaTrace compiles dense legal text into atomic, source-linked obligations—then shows which policies, controls and owners are affected when the rules change.</p>
             <div class="hero-actions">
               <button class="primary-button" data-jump="obligation-lab">Analyze a regulation <span>→</span></button>
+              <button class="secondary-button" data-jump="contradiction-lab">Prove a conflict</button>
               <button class="secondary-button" data-jump="change-radar">See change impact</button>
             </div>
             <div class="hero-proof">
@@ -125,6 +127,12 @@
           </article>
         </div>
 
+        <div class="contradiction-teaser" data-jump="contradiction-lab">
+          <div><span class="mono-kicker">NEW · NEURO-SYMBOLIC REASONING</span><h2>Two similar clauses. One formal verdict.</h2><p>Ground actors and records, compile deontic tuples, then let Z3 show whether the scoped obligations can coexist. The India demo exposes a false conflict before it becomes a false claim.</p></div>
+          <span class="teaser-proof">O(erase) ∧ F(erase) <b>→ UNSAT</b></span>
+          <span class="teaser-arrow">Explore the proof lab →</span>
+        </div>
+
         <div class="architecture-panel">
           <div class="architecture-copy"><span class="mono-kicker">SYSTEM ARCHITECTURE</span><h2>A compliance compiler,<br>not a confident chatbot.</h2><p>Deterministic components preserve provenance and structure. Statistical models find patterns. Schema gates reject incomplete claims. Reviewers control release.</p><button class="text-button" data-jump="research">Explore the research design →</button></div>
           <div class="pipeline" aria-label="RegulaTrace processing stages">
@@ -179,6 +187,25 @@
         </div>
         <div class="compare-action"><button class="primary-button" id="compare-button">Run constraint comparison <span>→</span></button></div>
         <div class="comparison-output" id="comparison-output"></div>
+      </section>
+
+      <section class="view" id="contradiction-lab" data-title="Contradiction Lab">
+        <div class="proof-hero">
+          <div><span class="mono-kicker">INDIA EDITION · NEURO + SYMBOLIC</span><h1>Similarity retrieves.<br><em>Logic decides.</em></h1><p>Turn legal language into inspectable tuples, ground the actor and record through explicit facts, then prove what the combined rules permit. Every verdict keeps its source and assumptions.</p></div>
+          <div class="proof-hero-formula"><span>COMBINED RULE CHECK</span><strong>O(Erase(x))<br>∧ F(Erase(x))</strong><b>UNSAT ⇢ proved deadlock</b><small>Only when actor, entity, time, and exceptions truly overlap.</small></div>
+        </div>
+        <div class="proof-steps" aria-label="Contradiction analysis pipeline"><span><b>01</b> CLAUSE INPUT</span><i>→</i><span><b>02</b> DEONTIC TUPLES</span><i>→</i><span><b>03</b> GRAPH GROUNDING</span><i>→</i><span><b>04</b> Z3 PROOF</span><i>→</i><span><b>05</b> AUDITABLE VERDICT</span></div>
+        <div class="proof-workspace">
+          <div class="proof-demo-bar"><div><span class="mono-kicker">CHOOSE A DEMONSTRATION</span><p>The official-source pair shows why the poster's apparent contradiction needs legal context. The synthetic pair produces a true UNSAT proof.</p></div><div class="proof-demo-actions"><button class="secondary-button small" id="load-official-conflict">DPDP + RBI KYC</button><button class="secondary-button small" id="load-synthetic-conflict">Provable synthetic deadlock</button></div></div>
+          <div class="proof-clause-grid">
+            <article class="proof-clause-card"><div class="proof-clause-head"><span>RULE A</span><b>Erasure side</b></div><label for="conflict-text-a">Legal clause</label><textarea id="conflict-text-a"></textarea><div class="proof-meta-grid"><label>Citation<input id="conflict-citation-a" type="text"></label><label>Effective from<input id="conflict-effective-a" type="date"></label></div><label>Official source URL<input id="conflict-url-a" type="url" placeholder="https://..."></label></article>
+            <div class="proof-versus">∧<small>same scenario?</small></div>
+            <article class="proof-clause-card"><div class="proof-clause-head"><span>RULE B</span><b>Retention side</b></div><label for="conflict-text-b">Legal clause</label><textarea id="conflict-text-b"></textarea><div class="proof-meta-grid"><label>Citation<input id="conflict-citation-b" type="text"></label><label>Effective from<input id="conflict-effective-b" type="date"></label></div><label>Official source URL<input id="conflict-url-b" type="url" placeholder="https://..."></label></article>
+          </div>
+          <div class="proof-context"><div class="proof-context-head"><span class="mono-kicker">SCENARIO & GRAPH FACTS</span><h2>What exactly are we proving?</h2></div><div class="proof-context-grid"><label>As-of date<input id="conflict-as-of" type="date"></label><label>Closure / reference date<input id="conflict-event-date" type="date"></label><label>Target actor<input id="conflict-actor" type="text"></label><label>Target record<input id="conflict-entity" type="text"></label></div><label class="proof-check"><input id="conflict-purpose-ended" type="checkbox" checked> The specified processing purpose has ended</label><label for="conflict-facts">Explicit graph links · one per line: subject | IS_A or SAME_AS | object</label><textarea id="conflict-facts" spellcheck="false"></textarea><small>Unlinked actors or records yield an indeterminate verdict. The engine never assumes two legal roles are identical from semantic similarity alone.</small></div>
+          <div class="proof-actions"><button class="primary-button" id="prove-conflict">Run Z3 proof <span>→</span></button><button class="secondary-button" id="export-conflict">Export proof JSON</button><span id="proof-runtime-note" role="status">Choose a demo or enter two clauses. First InLegalBERT run may take about a minute.</span></div>
+        </div>
+        <div class="proof-output" id="contradiction-output" aria-live="polite"></div>
       </section>
 
       <section class="view" id="change-radar" data-title="Change Radar">
@@ -279,6 +306,7 @@
       <div class="palette-results">
         <button data-palette-jump="obligation-lab"><span>⌁</span><div><b>Compile regulatory text</b><small>Open the Obligation Lab</small></div><kbd>1</kbd></button>
         <button data-palette-jump="comparator"><span>⇄</span><div><b>Compare a policy</b><small>Inspect constraint alignment</small></div><kbd>2</kbd></button>
+        <button data-palette-jump="contradiction-lab"><span>⚖</span><div><b>Prove a contradiction</b><small>Open the Z3 Contradiction Lab</small></div><kbd>5</kbd></button>
         <button data-palette-jump="change-radar"><span>◌</span><div><b>Detect regulatory change</b><small>Run material-change analysis</small></div><kbd>3</kbd></button>
         <button data-palette-jump="evidence-graph"><span>⌘</span><div><b>Trace an obligation</b><small>Open the evidence graph</small></div><kbd>4</kbd></button>
         <button data-palette-jump="executive"><span>◆</span><div><b>Open executive brief</b><small>Present the complete system story</small></div></button>
@@ -289,7 +317,7 @@
   <div class="demo-overlay" id="demo-overlay" hidden>
     <div class="demo-card" role="dialog" aria-modal="true" aria-labelledby="demo-title">
       <div class="demo-progress"><span id="demo-progress-bar"></span></div>
-      <div class="demo-top"><span>GUIDED DEMO · <b id="demo-step-count">1 / 4</b></span><button id="demo-close" aria-label="Close guided demo">×</button></div>
+      <div class="demo-top"><span>GUIDED DEMO · <b id="demo-step-count">1 / 5</b></span><button id="demo-close" aria-label="Close guided demo">×</button></div>
       <div class="demo-body"><span class="demo-icon" id="demo-icon">⌁</span><div><h2 id="demo-title">Compile an obligation</h2><p id="demo-copy">Start with a source clause. RegulaTrace preserves the words, identifies the duty and creates a reviewable atomic record.</p></div></div>
       <div class="demo-controls"><button class="secondary-button small" id="demo-back">Back</button><button class="primary-button small" id="demo-next">Show me <span>→</span></button></div>
     </div>

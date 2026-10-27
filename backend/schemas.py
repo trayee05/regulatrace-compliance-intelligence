@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -235,6 +236,124 @@ class BenchmarkResponse(APIModel):
     pass_rate: float = Field(alias="passRate")
     metrics: dict[str, float]
     suites: dict[str, list[dict[str, Any]]]
+
+
+class GroundingFact(APIModel):
+    subject: str = Field(min_length=2, max_length=120)
+    relation: Literal["IS_A", "SAME_AS"]
+    object: str = Field(min_length=2, max_length=120)
+
+
+class ContradictionClause(APIModel):
+    id: str = Field(min_length=2, max_length=50)
+    text: str = Field(min_length=12, max_length=8_000)
+    authority: str = Field(default="User supplied", max_length=120)
+    citation: str = Field(default="Unspecified clause", max_length=160)
+    source_url: str | None = Field(default=None, alias="sourceUrl", max_length=500)
+    effective_from: date | None = Field(default=None, alias="effectiveFrom")
+    actor_hint: str | None = Field(default=None, alias="actorHint", max_length=120)
+    entity_hint: str | None = Field(default=None, alias="entityHint", max_length=120)
+
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_be_http(cls, value: str | None) -> str | None:
+        if value and not value.startswith(("https://", "http://")):
+            raise ValueError("sourceUrl must be an HTTP or HTTPS URL")
+        return value
+
+
+class ContradictionContext(APIModel):
+    as_of: date = Field(alias="asOf")
+    event_date: date | None = Field(default=None, alias="eventDate")
+    target_actor: str = Field(alias="targetActor", min_length=2, max_length=120)
+    target_entity: str = Field(alias="targetEntity", min_length=2, max_length=120)
+    purpose_ended: bool = Field(default=True, alias="purposeEnded")
+    facts: list[GroundingFact] = Field(default_factory=list, max_length=30)
+
+
+class ContradictionRequest(APIModel):
+    clauses: list[ContradictionClause] = Field(min_length=2, max_length=6)
+    context: ContradictionContext
+
+
+class NormTuple(APIModel):
+    id: str
+    source_id: str = Field(alias="sourceId")
+    source_url: str | None = Field(alias="sourceUrl")
+    actor: str
+    action: Literal["ERASE", "RETAIN", "OTHER"]
+    modality: Literal["O", "F", "P", "UNKNOWN"]
+    entity: str
+    scope: str
+    duration_days: int | None = Field(alias="durationDays")
+    exception: str | None
+    evidence: str
+    extraction_method: str = Field(alias="extractionMethod")
+    status: Literal["ACTIVE", "INACTIVE", "EXCEPTED", "UNRESOLVED", "OUT_OF_SCOPE"]
+    reason: str
+
+
+class ProofResult(APIModel):
+    solver: str
+    check: Literal["sat", "unsat", "unknown", "not-run"]
+    constraints: list[str]
+    unsat_core: list[str] = Field(alias="unsatCore")
+    witness: str | None
+
+
+class GraphNode(APIModel):
+    id: str
+    label: str
+    type: Literal["actor", "entity", "source", "norm"]
+
+
+class GraphEdge(APIModel):
+    source: str
+    target: str
+    label: str
+
+
+class ContradictionGraph(APIModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    backend: Literal["neo4j", "in-memory"]
+    detail: str
+
+
+class PipelineStage(APIModel):
+    name: str
+    state: Literal["active", "rules", "not-configured", "offline", "error"]
+    detail: str
+
+
+class ContradictionResponse(APIModel):
+    verdict: Literal["SAT", "UNSAT", "INDETERMINATE"]
+    summary: str
+    tuples: list[NormTuple]
+    proof: ProofResult
+    graph: ContradictionGraph
+    stages: list[PipelineStage]
+    assumptions: list[str]
+    neural_similarity: float | None = Field(alias="neuralSimilarity")
+    dspy_suggestions: list[dict[str, str]] = Field(default_factory=list, alias="dspySuggestions")
+
+
+class ContradictionExample(APIModel):
+    id: str
+    title: str
+    subtitle: str
+    request: ContradictionRequest
+
+
+class SourcePrecisionRequest(APIModel):
+    retrieved_context_ids: list[str] = Field(alias="retrievedContextIds", max_length=500)
+    reference_context_ids: list[str] = Field(alias="referenceContextIds", max_length=500)
+
+
+class SourcePrecisionResponse(APIModel):
+    precision: float = Field(ge=0, le=1)
+    backend: Literal["ragas", "deterministic", "error"]
+    detail: str
 
 
 class ErrorBody(APIModel):

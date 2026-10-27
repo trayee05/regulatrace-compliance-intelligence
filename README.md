@@ -11,6 +11,7 @@ It is designed as both a strong classroom demonstration and a transparent resear
 - **Obligation Lab** — compiles clauses into actor, action, modality, timing, conditions, exceptions, references, confidence, and exact provenance.
 - **Evidence Graph** — visualizes the chain from authoritative source through normalized obligation to policy evidence and reviewer decision.
 - **Policy Comparator** — evaluates actor, action, polarity, timing, exception scope, and evidence sufficiency independently.
+- **Contradiction Lab** — turns paired clauses into typed deontic tuples, checks explicit actor/record graph facts and dates, compiles applicable rules into Z3, and shows a SAT/UNSAT/indeterminate verdict with an unsat core, source links, assumptions, and exportable proof JSON. An optional local InLegalBERT encoder displays advisory similarity; optional Neo4j persists the provenance graph.
 - **Change Radar** — aligns old and new provisions, identifies additions, removals, and material modifications, and explains observable changes with clearly labeled possible reasons and actions to review.
 - **Local Legal-BERT signal** — optionally retrieves the most relevant clause from a multi-clause policy and can recover some paraphrased alignments in Change Radar. Every result states whether the model actually ran.
 - **Persistent case workspace** — stores analyses, restores prior cases, records reviewer decisions, and exposes an audit trail in SQLite.
@@ -46,6 +47,26 @@ The API health response and top status show whether the local checkpoint is read
 
 The current comparator evaluates the first regulatory clause against the selected policy clause. Long clauses are truncated to 256 model tokens, and retrieval considers at most 64 policy candidates. The existing 16-case benchmark measures the rule baseline; a separately annotated held-out corpus is needed to measure model-assisted precision and recall.
 
+### Prepare the Indian-law contradiction demo
+
+The core proof needs only `requirements.txt` and works immediately. To enable the **actual local InLegalBERT checkpoint** for advisory similarity, run once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup-neurosymbolic.ps1
+powershell -ExecutionPolicy Bypass -File .\stop-regulatrace.ps1
+powershell -ExecutionPolicy Bypass -File .\start-regulatrace.ps1
+```
+
+The model files are downloaded to ignored `.regulatrace/models/inlegalbert/`, not committed. The published [`law-ai/InLegalBERT` checkpoint](https://huggingface.co/law-ai/InLegalBERT) is a pretrained Indian-law encoder. It provides an advisory embedding score here; it is **not a fine-tuned named-entity recognizer**. The first proof request in a new server process can take about a minute while PyTorch loads the checkpoint. Run each demo once before class so subsequent requests are warm.
+
+For Neo4j persistence, start a Neo4j server separately, then set `REGULATRACE_NEO4J_URI`, `REGULATRACE_NEO4J_USER`, `REGULATRACE_NEO4J_PASSWORD`, and optionally `REGULATRACE_NEO4J_DATABASE` before starting RegulaTrace. The verdict uses the explicit graph facts supplied with the request; if Neo4j is absent, the same graph is displayed in memory and the UI labels that state. The knowledge graph is a grounding and provenance structure, not a source of automatically verified legal equivalences.
+
+For research experiments, `requirements-research.txt` adds DSPy and Ragas. A configured `REGULATRACE_DSPY_MODEL` (and optionally `REGULATRACE_DSPY_API_BASE` / `REGULATRACE_DSPY_API_KEY`) generates **review candidates**; only the validated deterministic tuples enter Z3. Do not configure a remote model with confidential clauses unless you intend to send those clauses to that provider. `POST /api/contradictions/score-sources` computes source-ID precision against expert-supplied reference IDs, using Ragas `IDBasedContextPrecision` when installed and a clearly labeled exact-arithmetic fallback otherwise. No Ragas score is generated during normal proof requests because they have no reference labels.
+
+**Important correction to the poster example:** The [DPDP Act, section 8(7)](https://www.indiacode.nic.in/bitstream/123456789/22037/2/a2023-22.pdf) expressly allows retention needed to comply with law. The [RBI KYC Master Direction, paragraph 46](https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=11566) requires certain identification records to be retained for at least five years after the relationship ends. The [13 November 2025 commencement notification](https://egazette.gov.in/WriteReadData/2025/267647.pdf) stages the relevant DPDP provisions for 18 months later. Therefore the built-in official-source scenario shows **SAT with an exception**, not a proven legal deadlock. The separate, visibly labeled synthetic scenario shows a genuine **UNSAT** core. The official examples paraphrase clauses; use the linked primary sources for any legal claim.
+
+The proof formalizes the selected actor, record, event date, applicable duration and supplied `IS_A`/`SAME_AS` facts. An UNSAT result is a proof about those modeled constraints, not a finding that one real statute overrides another. Unsupported or ungrounded clauses are labeled indeterminate.
+
 To stop it, double-click `stop-regulatrace.ps1` or run:
 
 ```powershell
@@ -77,6 +98,8 @@ python -m uvicorn backend.main:app --reload --port 8000
 6. Show added, removed, and modified duties in **Change Radar**.
 7. Finish with the executable benchmark in **Evaluation Console** and export the Executive Brief to PDF from the browser print dialog.
 
+For the poster presentation, open **Contradiction Lab** after step 4. Run **Provable synthetic deadlock** first and point to the two-rule Z3 unsat core. Then load **DPDP + RBI KYC**, run it, and explain how the retention exception, effective date, and graph links change the formal outcome. Export either proof as JSON for your report.
+
 The sample upload document is in `examples/RegulaTrace_Demo_Regulation.docx`. Its issuing authority and jurisdiction are fictional; use it to demonstrate extraction, not as a real legal source. Change Radar's possible rationale is an inference from old and new wording. Verify actual legislative intent with official notes or recitals.
 
 ### Two-minute Legal-BERT demonstration
@@ -97,6 +120,9 @@ The screen labels the source of the alignment and displays the raw cosine score.
 | `POST` | `/api/analyze` | Evidence-linked obligation extraction |
 | `POST` | `/api/compare` | Regulatory-to-policy comparison |
 | `POST` | `/api/versions/compare` | Regulatory change analysis |
+| `GET` | `/api/contradictions/examples` | Source-linked and synthetic proof demos |
+| `POST` | `/api/contradictions/analyze` | Grounded deontic extraction and Z3 proof |
+| `POST` | `/api/contradictions/score-sources` | Source-ID precision against supplied labels; optional Ragas metric |
 | `POST` | `/api/documents/ingest` | PDF, DOCX, TXT, or Markdown text extraction |
 | `GET` | `/api/analyses` | Persistent case history |
 | `GET` | `/api/analyses/{analysis_id}` | Restore an analysis |

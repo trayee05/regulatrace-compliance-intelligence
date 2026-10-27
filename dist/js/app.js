@@ -66,6 +66,7 @@ const roadmap = [
 const demoSteps = [
   { view: "obligation-lab", icon: "⌁", title: "Compile an obligation", copy: "Start with a source clause. RegulaTrace preserves the words, identifies the duty and creates a reviewable atomic record." },
   { view: "comparator", icon: "⇄", title: "Challenge the policy", copy: "Topic similarity is only the first layer. The comparator separately tests polarity, timing, actor, scope and exception compatibility." },
+  { view: "contradiction-lab", icon: "⚖", title: "Prove a legal deadlock", copy: "A similar-looking pair is not automatically contradictory. Ground the same actor, record and date, apply exceptions, then let Z3 show SAT or an UNSAT core." },
   { view: "change-radar", icon: "◌", title: "Trace a legal revision", copy: "A 90-day review becoming 60 days is not a cosmetic edit. The radar identifies material changes and the downstream work they create." },
   { view: "evidence-graph", icon: "⌘", title: "Make the decision defensible", copy: "Every field carries a source span, version, transformation path, confidence and review state. The answer always has a path home." },
 ];
@@ -84,6 +85,9 @@ const state = {
   benchmark: null,
   runtime: { mode: "checking", detail: "Checking FastAPI backend" },
   legalBert: null,
+  contradictionExamples: [],
+  contradictionResult: null,
+  selectedContradictionExample: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -627,8 +631,8 @@ function setupPalette() {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); palette.hidden ? open() : close(); }
     if (event.key === "Escape") { close(); if (!$("#demo-overlay").hidden) $("#demo-overlay").hidden = true; }
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && $("#obligation-lab").classList.contains("active")) runAnalysis();
-    if (!event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3", "4"].includes(event.key) && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
-      const views = { "1": "obligation-lab", "2": "comparator", "3": "change-radar", "4": "evidence-graph" };
+    if (!event.ctrlKey && !event.metaKey && !event.altKey && ["1", "2", "3", "4", "5"].includes(event.key) && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+      const views = { "1": "obligation-lab", "2": "comparator", "3": "change-radar", "4": "evidence-graph", "5": "contradiction-lab" };
       showView(views[event.key]);
     }
   });
@@ -656,6 +660,92 @@ function setupDemo() {
   });
 }
 
+function loadContradictionExample(example) {
+  state.selectedContradictionExample = example;
+  const request = example.request;
+  request.clauses.slice(0, 2).forEach((clause, index) => {
+    const suffix = index === 0 ? "a" : "b";
+    $(`#conflict-text-${suffix}`).value = clause.text;
+    $(`#conflict-citation-${suffix}`).value = clause.citation ?? "";
+    $(`#conflict-effective-${suffix}`).value = clause.effectiveFrom ?? "";
+    $(`#conflict-url-${suffix}`).value = clause.sourceUrl ?? "";
+  });
+  const context = request.context;
+  $("#conflict-as-of").value = context.asOf;
+  $("#conflict-event-date").value = context.eventDate ?? "";
+  $("#conflict-actor").value = context.targetActor;
+  $("#conflict-entity").value = context.targetEntity;
+  $("#conflict-purpose-ended").checked = context.purposeEnded;
+  $("#conflict-facts").value = context.facts.map((fact) => `${fact.subject} | ${fact.relation} | ${fact.object}`).join("\n");
+  state.contradictionResult = null;
+  $("#contradiction-output").innerHTML = "";
+  $("#proof-runtime-note").textContent = `${example.title} loaded. Run Z3 to see the proof.`;
+}
+
+function readContradictionRequest() {
+  const clauses = ["a", "b"].map((suffix, index) => ({
+    id: state.selectedContradictionExample?.request.clauses[index]?.id ?? (index === 0 ? "RULE-A" : "RULE-B"),
+    text: $(`#conflict-text-${suffix}`).value.trim(),
+    authority: state.selectedContradictionExample?.request.clauses[index]?.authority ?? "User supplied",
+    citation: $(`#conflict-citation-${suffix}`).value.trim() || `Rule ${suffix.toUpperCase()}`,
+    sourceUrl: $(`#conflict-url-${suffix}`).value.trim() || null,
+    effectiveFrom: $(`#conflict-effective-${suffix}`).value || null,
+  }));
+  const facts = $("#conflict-facts").value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [subject, relation, object] = line.split("|").map((part) => part?.trim());
+    if (!subject || !object || !["IS_A", "SAME_AS"].includes(relation)) throw new Error(`Invalid graph fact: ${line}`);
+    return { subject, relation, object };
+  });
+  return { clauses, context: {
+    asOf: $("#conflict-as-of").value,
+    eventDate: $("#conflict-event-date").value || null,
+    targetActor: $("#conflict-actor").value.trim(),
+    targetEntity: $("#conflict-entity").value.trim(),
+    purposeEnded: $("#conflict-purpose-ended").checked,
+    facts,
+  } };
+}
+
+function renderContradiction() {
+  const data = state.contradictionResult;
+  if (!data) return;
+  const core = new Set(data.proof.unsatCore);
+  const sourceLink = (tuple) => tuple.sourceUrl ? `<a href="${escapeHtml(tuple.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : `<span>Source URL not supplied</span>`;
+  const tuples = data.tuples.map((tuple) => `<article class="norm-card ${core.has(tuple.id) ? "in-core" : ""}"><div class="norm-card-top"><b>${escapeHtml(tuple.id)}</b><span class="norm-status ${tuple.status.toLowerCase()}">${escapeHtml(tuple.status)}</span></div><code>${escapeHtml(tuple.modality)}(${escapeHtml(tuple.action)}(${escapeHtml(tuple.entity)}))</code><div class="norm-fields"><span><b>ACTOR</b>${escapeHtml(tuple.actor)}</span><span><b>SCOPE</b>${escapeHtml(tuple.scope)}</span><span><b>DURATION</b>${tuple.durationDays == null ? "—" : `${tuple.durationDays} days`}</span><span><b>METHOD</b>${escapeHtml(tuple.extractionMethod)}</span></div><p>${escapeHtml(tuple.reason)}</p><div class="norm-source">${sourceLink(tuple)} <small>${escapeHtml(tuple.evidence)}</small></div></article>`).join("");
+  const nodes = data.graph.nodes.map((node) => `<span class="proof-node ${escapeHtml(node.type)}">${escapeHtml(node.label)}</span>`).join("");
+  const edges = data.graph.edges.map((edge) => `<li><b>${escapeHtml(edge.source)}</b> <span>${escapeHtml(edge.label)}</span> <b>${escapeHtml(edge.target)}</b></li>`).join("");
+  const stages = data.stages.map((stage) => `<div class="proof-stage"><span class="stage-dot ${escapeHtml(stage.state)}"></span><div><b>${escapeHtml(stage.name)}</b><p>${escapeHtml(stage.detail)}</p></div><small>${escapeHtml(stage.state)}</small></div>`).join("");
+  const coreText = data.proof.unsatCore.length ? data.proof.unsatCore.map(escapeHtml).join(" + ") : "None — no incompatible active constraints";
+  const dspyCandidates = (data.dspySuggestions ?? []).map((item, index) => `<li><b>Clause ${index + 1}</b> ${escapeHtml(item.actor)} · ${escapeHtml(item.modality)}(${escapeHtml(item.action)}(${escapeHtml(item.entity)})) · ${escapeHtml(item.scope)}</li>`).join("");
+  $("#contradiction-output").innerHTML = `<div class="verdict-banner ${data.verdict.toLowerCase()}"><div><span>FORMAL VERDICT · ${escapeHtml(data.proof.solver)}</span><h2>${escapeHtml(data.verdict)}</h2><p>${escapeHtml(data.summary)}</p></div><div class="verdict-symbol">${data.verdict === "UNSAT" ? "⊥" : data.verdict === "SAT" ? "✓" : "?"}</div></div><div class="proof-result-grid"><section class="proof-result-card"><div class="proof-result-heading"><span>01 / LANGUAGE → LOGIC</span><h3>Deontic tuples</h3></div><div class="norm-list">${tuples}</div></section><section class="proof-result-card"><div class="proof-result-heading"><span>02 / GROUNDED CONTEXT</span><h3>Knowledge graph</h3><small>${escapeHtml(data.graph.backend)} · ${escapeHtml(data.graph.detail)}</small></div><div class="proof-node-cloud">${nodes}</div><ul class="proof-edge-list">${edges}</ul></section></div><div class="proof-result-grid lower"><section class="proof-result-card"><div class="proof-result-heading"><span>03 / SYMBOLIC CERTIFICATE</span><h3>Z3 proof trace</h3></div><div class="proof-code">${data.proof.constraints.map((line) => `<div>${escapeHtml(line)}</div>`).join("") || "No active constraints compiled."}<strong>check-sat → ${escapeHtml(data.proof.check.toUpperCase())}</strong></div><p class="proof-core"><b>Minimal conflicting sources</b><br>${coreText}</p>${data.proof.witness ? `<p class="proof-witness">${escapeHtml(data.proof.witness)}</p>` : ""}</section><section class="proof-result-card"><div class="proof-result-heading"><span>04 / MODEL TRANSPARENCY</span><h3>Pipeline status</h3></div><div class="proof-stage-list">${stages}</div>${data.neuralSimilarity == null ? "" : `<p class="neural-note">InLegalBERT entity cosine: ${(data.neuralSimilarity * 100).toFixed(1)}%. Advisory only; similarity cannot prove legal identity.</p>`}${dspyCandidates ? `<div class="dspy-candidates"><b>DSPy review candidates · not solver inputs</b><ul>${dspyCandidates}</ul></div>` : ""}</section></div><div class="proof-assumptions"><b>Model assumptions</b><ul>${data.assumptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`;
+}
+
+async function runContradiction() {
+  const button = $("#prove-conflict");
+  button.disabled = true;
+  $("#proof-runtime-note").textContent = "Grounding rules and running Z3. Initial InLegalBERT load may take around a minute…";
+  try {
+    const payload = readContradictionRequest();
+    state.contradictionResult = await requestApi("/api/contradictions/analyze", payload, 120000);
+    renderContradiction();
+    $("#proof-runtime-note").textContent = `Live FastAPI result · ${state.contradictionResult.graph.backend} graph · ${state.contradictionResult.proof.solver} solver`;
+    $("#contradiction-output").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (error) {
+    $("#proof-runtime-note").textContent = `Backend proof unavailable: ${error.message}`;
+    toast(error.message, "Proof failed");
+  } finally { button.disabled = false; }
+}
+
+async function initializeContradiction() {
+  try {
+    state.contradictionExamples = await requestApi("/api/contradictions/examples", undefined, 10000);
+    const official = state.contradictionExamples.find((item) => item.id === "official-conditional-retention");
+    if (official) loadContradictionExample(official);
+  } catch (error) {
+    $("#proof-runtime-note").textContent = `Live examples unavailable: ${error.message}. Start FastAPI to use this lab.`;
+  }
+}
+
 function bindActions() {
   $("#load-gdpr").addEventListener("click", async () => { await loadSample("gdpr"); toast("GDPR Article 33 sample loaded.", "Sample ready"); });
   $("#load-ai-act").addEventListener("click", async () => { await loadSample("aiAct"); toast("EU AI Act Article 16 sample loaded.", "Sample ready"); });
@@ -679,6 +769,11 @@ function bindActions() {
   $("#graph-zoom-in").addEventListener("click", () => { state.graphScale = Math.min(1.35, state.graphScale + .1); $("#graph-zoom-label").textContent = `${Math.round(state.graphScale * 100)}%`; renderGraph(); });
   $("#graph-zoom-out").addEventListener("click", () => { state.graphScale = Math.max(.75, state.graphScale - .1); $("#graph-zoom-label").textContent = `${Math.round(state.graphScale * 100)}%`; renderGraph(); });
   $("#run-benchmark").addEventListener("click", () => runBenchmark(true));
+  $("#load-official-conflict").addEventListener("click", () => { const item = state.contradictionExamples.find((example) => example.id === "official-conditional-retention"); if (item) loadContradictionExample(item); else toast("Start FastAPI to load live examples.", "API unavailable"); });
+  $("#load-synthetic-conflict").addEventListener("click", () => { const item = state.contradictionExamples.find((example) => example.id === "synthetic-unsat"); if (item) loadContradictionExample(item); else toast("Start FastAPI to load live examples.", "API unavailable"); });
+  $("#prove-conflict").addEventListener("click", runContradiction);
+  $("#export-conflict").addEventListener("click", () => { if (!state.contradictionResult) return toast("Run the proof first.", "Nothing to export"); downloadJson(state.contradictionResult, "regulatrace-z3-proof.json"); });
+  $$("#contradiction-lab textarea, #contradiction-lab input").forEach((element) => element.addEventListener("input", () => { state.selectedContradictionExample = null; }));
 }
 
 async function initialize() {
@@ -693,6 +788,7 @@ async function initialize() {
   $("#old-version").value = OLD_VERSION;
   $("#new-version").value = NEW_VERSION;
   await checkBackendHealth();
+  await initializeContradiction();
   await loadSample("gdpr", false);
   await runComparison(false);
   await runDiff(false);

@@ -38,7 +38,7 @@ if (-not (Test-Path $venvPython)) {
 $requirementsHash = (Get-FileHash $requirements -Algorithm SHA256).Hash
 $installedHash = if (Test-Path $requirementsMarker) { Get-Content $requirementsMarker } else { "" }
 if ($requirementsHash -ne $installedHash) {
-    & $venvPython -c "import fastapi, uvicorn, pydantic, pytest, httpx, pypdf, multipart" 2>$null
+    & $venvPython -c "import fastapi, uvicorn, pydantic, pytest, httpx, pypdf, multipart, z3, neo4j" 2>$null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Preparing the RegulaTrace runtime (first launch only)..." -ForegroundColor Cyan
         & $venvPython -m pip install --disable-pip-version-check -r $requirements
