@@ -1,12 +1,13 @@
 # RegulaTrace Project Status
 
-Status date: 2026-10-26
-Current milestone: Presentation Edition — integrated full-stack research demonstrator
+Status date: 2026-10-27
+Current milestone: Presentation Edition with optional local Legal-BERT assistance
 
 ## Verified result
 
 - FastAPI and frontend run together at `http://127.0.0.1:8000`.
-- Backend integration tests and JavaScript engine tests cover extraction, comparison, version analysis, and change explanations.
+- 17 backend integration tests and 7 JavaScript engine tests pass on 2026-10-27.
+- The locally downloaded LEGAL-BERT-SMALL checkpoint ran through both live API endpoints: it selected the relevant second policy clause and aligned a paraphrased review clause as a modification. The browser displayed the model state and evidence.
 - The executable challenge suite passed 16 of 16 transparent synthetic-adversarial cases, with 0% critical misses on that suite.
 - Browser verification completed the live story, rendered three evidence-linked obligations, persisted one analysis and one reviewer decision, restored the case history, and produced no console errors.
 
@@ -33,6 +34,7 @@ Current milestone: Presentation Edition — integrated full-stack research demon
 - Constraint-level policy comparison with an explicit verdict and dimension-by-dimension evidence.
 - Old/new regulatory version comparison with added, removed, and modified clause classification.
 - Change explanations that state the observed edit, a possible rationale when wording supports one, and an operational action to review. Unknown motives are labeled as such.
+- Optional LEGAL-BERT-SMALL inference for retrieval of a relevant clause from a multi-clause policy and conservative paraphrased clause alignment, with model state and raw cosine scores reported explicitly.
 - Executable 16-case transparent challenge suite covering extraction, modality, actor, deadlines, provenance, policy comparison, and versioning.
 - Persistent human review decisions: confirmed, corrected, and rejected.
 
@@ -43,6 +45,7 @@ Current milestone: Presentation Edition — integrated full-stack research demon
 - Backend tests, JavaScript tests, and JavaScript syntax validation.
 - A two-page fictional demonstration regulation in `examples/` for document upload.
 - Ignored runtime database, logs, virtual environment, test cache, and other generated state.
+- Separate, reproducible Legal-BERT setup; model weights remain outside Git.
 
 ## Honest research and production boundaries
 
@@ -50,17 +53,18 @@ These boundaries do not prevent the presentation workflow from running; they def
 
 - Scanned/image-only PDFs require OCR before ingestion. Current PDF support extracts embedded text.
 - The persistent store is local, single-user SQLite. A deployed multi-user edition would add identity, role-based access, concurrent workflows, encryption policy, backups, and retention controls.
-- The deterministic engine is an explainable baseline rather than a semantic legal-language model. Deep paraphrase, inherited headings, complex tables, and heavily nested drafting can require reviewer correction.
+- The deterministic engine remains an explainable baseline. Legal-BERT assists matching only when locally installed; it is a pretrained encoder, not a fine-tuned obligation extractor. Inherited headings, complex tables, and heavily nested drafting can require reviewer correction.
 - Deadline normalization does not yet resolve business-day calendars, holidays, or jurisdiction-specific counting rules.
-- Policy comparison and version alignment remain lexical and constraint-based; the interface deliberately exposes uncertainty instead of claiming legal certainty.
+- The policy verdict remains constraint-based; Legal-BERT's raw cosine is an uncalibrated diagnostic. Change Radar uses a conservative neural matching threshold, which requires evaluation on an annotated legal corpus before any recall or precision claim.
 - Change rationales are textual inferences, not evidence of the regulator's actual intent; official explanatory material is not ingested automatically.
 - The included benchmark is transparent and synthetic-adversarial, not an external peer-reviewed legal corpus. Paper claims should be based on a separately annotated, document-level held-out dataset with inter-annotator agreement.
+- The existing 16-case benchmark measures the deterministic baseline, not Legal-BERT quality. The current neural matching threshold is provisional and English-only; embeddings truncate each clause at 256 tokens. Policy retrieval considers at most 64 clauses and compares the first regulatory requirement. A held-out annotated pair set is needed before reporting neural precision or recall.
 - The application supports decision review and evidence traceability but is not legal advice, a compliance certificate, or an autonomous release authority.
 
 ## Paper-ready next study
 
 1. Build an expert-annotated, jurisdiction-balanced corpus with document-level train/dev/test splits.
 2. Measure field-level span F1, critical-miss rate, provenance validity, calibration, comparison macro F1, change-impact recall, and reviewer-time reduction.
-3. Compare this deterministic baseline with n-gram, legal-domain encoder, and constrained language-model systems.
+3. Compare the deterministic baseline, the current Legal-BERT-assisted alignment, n-grams, a fine-tuned legal-domain encoder, and constrained language-model systems.
 4. Run blinded reviewer studies and report error taxonomies, confidence intervals, ablations, and cross-jurisdiction generalization.
 5. Preserve the existing evidence contract so every learned result remains attributable and reviewable.

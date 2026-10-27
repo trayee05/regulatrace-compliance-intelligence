@@ -13,9 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.engine import ENGINE_VERSION, analyze_document, compare_policy, compare_versions
+from backend.engine import ENGINE_VERSION, analyze_document
 from backend.evaluation import run_benchmark
 from backend.ingestion import IngestionError, extract_document
+from backend.hybrid import compare_policy_hybrid, compare_versions_hybrid
+from backend.legalbert import model_status
 from backend.storage import audit_trail, dashboard, get_analysis, list_analyses, record_review, save_analysis
 from backend.schemas import (
     AnalysisHistoryItem,
@@ -51,7 +53,7 @@ app = FastAPI(
     description=(
         "Presentation-ready evidence-linked regulatory obligation extraction, "
         "document ingestion, policy comparison, version change analysis, persistent "
-        "human review, audit trails, and executable evaluation."
+        "human review, audit trails, optional local Legal-BERT semantic retrieval, and executable evaluation."
     ),
     version="2.0.0-presentation",
     docs_url="/api/docs",
@@ -89,7 +91,7 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 async def unhandled_exception_handler(_request: Request, _exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=500,
-        content={"error": {"code": "INTERNAL_ERROR", "message": "RegulaTrace could not complete the deterministic analysis.", "details": None}},
+        content={"error": {"code": "INTERNAL_ERROR", "message": "RegulaTrace could not complete the analysis.", "details": None}},
     )
 
 
@@ -100,8 +102,8 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["System"])
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "regulatrace-api", "phase": "presentation-edition", "engineVersion": ENGINE_VERSION}
+def health() -> dict[str, Any]:
+    return {"status": "ok", "service": "regulatrace-api", "phase": "presentation-edition", "engineVersion": ENGINE_VERSION, "legalBert": model_status()}
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse, responses=ERROR_RESPONSES, tags=["Analysis"])
@@ -115,12 +117,12 @@ def analyze(request: AnalyzeRequest) -> dict[str, Any]:
 
 @app.post("/api/compare", response_model=ComparisonResponse, responses=ERROR_RESPONSES, tags=["Analysis"])
 def compare(request: CompareRequest) -> dict[str, Any]:
-    return compare_policy(request.regulatory_text, request.policy_text)
+    return compare_policy_hybrid(request.regulatory_text, request.policy_text)
 
 
 @app.post("/api/versions/compare", response_model=VersionCompareResponse, responses=ERROR_RESPONSES, tags=["Analysis"])
 def versions_compare(request: VersionCompareRequest) -> dict[str, Any]:
-    return compare_versions(request.old_text, request.new_text)
+    return compare_versions_hybrid(request.old_text, request.new_text)
 
 
 @app.post("/api/documents/ingest", response_model=IngestResponse, responses=ERROR_RESPONSES, tags=["Documents"])

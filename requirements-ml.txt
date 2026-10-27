@@ -1,0 +1,3 @@
+# Optional local Legal-BERT inference runtime. Install after requirements.txt.
+torch==2.5.1
+transformers==4.46.3

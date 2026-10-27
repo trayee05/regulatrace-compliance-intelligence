@@ -109,6 +109,22 @@ class ComparisonDimension(APIModel):
     detail: str
 
 
+class ModelSignal(APIModel):
+    state: Literal["disabled", "setup-required", "ready", "active", "error"]
+    ready: bool | None = None
+    model_id: str = Field(alias="modelId")
+    detail: str
+    cosine_similarity: float | None = Field(default=None, alias="cosineSimilarity")
+
+
+class RetrievalInfo(APIModel):
+    candidate_count: int = Field(alias="candidateCount")
+    considered_count: int = Field(alias="consideredCount")
+    selected_index: int = Field(alias="selectedIndex")
+    selected_clause: str = Field(alias="selectedClause")
+    method: Literal["hybrid-legal-bert-lexical"]
+
+
 class ComparisonResponse(APIModel):
     requirement: ObligationRecord | None
     policy: ObligationRecord | None
@@ -116,6 +132,8 @@ class ComparisonResponse(APIModel):
     score: float
     outcome: Literal["POTENTIAL_MISMATCH", "LIKELY_ALIGNED", "REVIEW_REQUIRED"]
     lexical_similarity: float = Field(alias="lexicalSimilarity")
+    model_signal: ModelSignal | None = Field(default=None, alias="modelSignal")
+    retrieval: RetrievalInfo | None = None
 
 
 class ChangeExplanation(APIModel):
@@ -133,6 +151,8 @@ class VersionChange(APIModel):
     similarity: float
     severity: Literal["CRITICAL", "MATERIAL"]
     explanation: ChangeExplanation
+    alignment_method: Literal["lexical", "legal-bert", "none"] | None = Field(default=None, alias="alignmentMethod")
+    semantic_similarity: float | None = Field(default=None, alias="semanticSimilarity")
 
 
 class VersionCompareResponse(APIModel):
@@ -141,6 +161,7 @@ class VersionCompareResponse(APIModel):
     affected_obligations: int = Field(alias="affectedObligations")
     critical_count: int = Field(alias="criticalCount")
     materiality_score: int = Field(alias="materialityScore")
+    model_signal: ModelSignal | None = Field(default=None, alias="modelSignal")
 
 
 class HealthResponse(APIModel):
@@ -148,6 +169,7 @@ class HealthResponse(APIModel):
     service: str
     phase: str
     engine_version: str = Field(alias="engineVersion")
+    legal_bert: ModelSignal = Field(alias="legalBert")
 
 
 class IngestResponse(APIModel):

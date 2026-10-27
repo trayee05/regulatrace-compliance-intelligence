@@ -379,12 +379,12 @@ def explain_change(change_type: str, before: str | None, after: str | None) -> d
     }
 
 
-def compare_versions(old_text: str = "", new_text: str = "") -> dict[str, Any]:
+def compare_versions(old_text: str = "", new_text: str = "", semantic_scores: list[list[float]] | None = None) -> dict[str, Any]:
     old_clauses = segment_clauses(old_text)
     new_clauses = segment_clauses(new_text)
     matched_old: set[int] = set()
     changes: list[dict[str, Any]] = []
-    for current in new_clauses:
+    for current_index, current in enumerate(new_clauses):
         best_index = -1
         best_score = 0.0
         for index, previous in enumerate(old_clauses):
@@ -394,16 +394,33 @@ def compare_versions(old_text: str = "", new_text: str = "") -> dict[str, Any]:
             if similarity > best_score:
                 best_score = similarity
                 best_index = index
-        if best_index >= 0 and best_score >= 0.38:
+        alignment_method = "lexical" if best_index >= 0 and best_score >= 0.38 else "none"
+        if alignment_method == "none" and semantic_scores is not None:
+            current_modality = classify_modality(current)
+            current_actor = derive_actor(current, current_modality)
+            semantic_candidates = [
+                (semantic_scores[index][current_index], jaccard(previous, current), index)
+                for index, previous in enumerate(old_clauses)
+                if index not in matched_old
+                and classify_modality(previous)["label"] == current_modality["label"]
+                and jaccard(derive_actor(previous, classify_modality(previous)), current_actor) >= 0.5
+            ]
+            if semantic_candidates:
+                semantic_candidates.sort(reverse=True)
+                semantic, lexical, candidate_index = semantic_candidates[0]
+                margin = semantic - semantic_candidates[1][0] if len(semantic_candidates) > 1 else 1.0
+                if semantic >= 0.87 and lexical >= 0.2 and margin >= 0.025:
+                    best_index, best_score, alignment_method = candidate_index, lexical, "legal-bert"
+        if best_index >= 0 and alignment_method != "none":
             matched_old.add(best_index)
             previous = old_clauses[best_index]
             if best_score < 0.965 or clean(previous).lower() != clean(current).lower():
-                changes.append({"id": f"CH-{stable_hash(previous + current)}", "type": "MODIFIED", "before": previous, "after": current, "similarity": best_score, "severity": change_severity(previous, current), "explanation": explain_change("MODIFIED", previous, current)})
+                changes.append({"id": f"CH-{stable_hash(previous + current)}", "type": "MODIFIED", "before": previous, "after": current, "similarity": best_score, "severity": change_severity(previous, current), "explanation": explain_change("MODIFIED", previous, current), "alignmentMethod": alignment_method, "semanticSimilarity": semantic_scores[best_index][current_index] if semantic_scores is not None else None})
         else:
-            changes.append({"id": f"CH-{stable_hash(current)}", "type": "ADDED", "before": None, "after": current, "similarity": 0, "severity": "CRITICAL" if SEVERITY_TERMS.search(current) else "MATERIAL", "explanation": explain_change("ADDED", None, current)})
+            changes.append({"id": f"CH-{stable_hash(current)}", "type": "ADDED", "before": None, "after": current, "similarity": 0, "severity": "CRITICAL" if SEVERITY_TERMS.search(current) else "MATERIAL", "explanation": explain_change("ADDED", None, current), "alignmentMethod": "none", "semanticSimilarity": None})
     for index, previous in enumerate(old_clauses):
         if index not in matched_old:
-            changes.append({"id": f"CH-{stable_hash(previous)}", "type": "REMOVED", "before": previous, "after": None, "similarity": 0, "severity": "CRITICAL", "explanation": explain_change("REMOVED", previous, None)})
+            changes.append({"id": f"CH-{stable_hash(previous)}", "type": "REMOVED", "before": previous, "after": None, "similarity": 0, "severity": "CRITICAL", "explanation": explain_change("REMOVED", previous, None), "alignmentMethod": "none", "semanticSimilarity": None})
     counts: dict[str, int] = {}
     for change in changes:
         counts[change["type"]] = counts.get(change["type"], 0) + 1

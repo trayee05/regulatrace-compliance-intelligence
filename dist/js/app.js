@@ -83,6 +83,7 @@ const state = {
   dashboard: null,
   benchmark: null,
   runtime: { mode: "checking", detail: "Checking FastAPI backend" },
+  legalBert: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -96,7 +97,7 @@ function setRuntimeStatus(mode, detail) {
   const status = $("#runtime-status");
   if (status) {
     status.className = `runtime-status ${mode}`;
-    const label = mode === "backend" ? "FastAPI connected" : mode === "fallback" ? "Browser fallback" : "Checking API…";
+    const label = mode === "backend" ? (state.legalBert?.ready ? "FastAPI + Legal-BERT ready" : "FastAPI · rules only") : mode === "fallback" ? "Browser fallback" : "Checking API…";
     $("span", status).textContent = label;
     status.title = detail;
   }
@@ -138,7 +139,8 @@ async function checkBackendHealth() {
   setRuntimeStatus("checking", `Checking ${API_BASE_URL}`);
   try {
     const health = await requestApi("/api/health", undefined, 2500);
-    setRuntimeStatus("backend", `${health.service} · ${health.engineVersion}`);
+    state.legalBert = health.legalBert ?? null;
+    setRuntimeStatus("backend", `${health.service} · ${health.engineVersion} · ${health.legalBert?.detail ?? "Legal-BERT status unknown"}`);
     return true;
   } catch (error) {
     setRuntimeStatus("fallback", `FastAPI unavailable: ${error.message}`);
@@ -146,10 +148,10 @@ async function checkBackendHealth() {
   }
 }
 
-async function executeWithFallback(path, payload, fallback, operation, notifyFallback = true) {
+async function executeWithFallback(path, payload, fallback, operation, notifyFallback = true, timeoutMs = 8000) {
   if (state.runtime.mode === "fallback" && !notifyFallback) return fallback();
   try {
-    const result = await requestApi(path, payload);
+    const result = await requestApi(path, payload, timeoutMs);
     setRuntimeStatus("backend", `${operation} returned by FastAPI at ${API_BASE_URL}`);
     return result;
   } catch (error) {
@@ -400,13 +402,22 @@ function renderComparison() {
   output.innerHTML = `<div class="comparison-result">
     <div class="score-panel"><div class="score-ring" style="--score:${Math.round(result.score * 100)}"><b>${Math.round(result.score * 100)}<span>/100</span></b></div><span class="outcome">${outcomeText}</span><p>Overall score cannot override a critical polarity or timing failure.</p></div>
     <div class="dimension-list">${result.dimensions.map((dimension) => `<article class="dimension-row"><header><span>${dimension.label}</span><b>${percentage(dimension.score)}</b></header><div class="dimension-track"><i style="width:${percentage(dimension.score)}"></i></div><p>${escapeHtml(dimension.detail)}</p></article>`).join("")}</div>
-  </div>`;
+  </div>${renderModelSignal(result.modelSignal, "Action similarity")}${result.retrieval ? `<div class="retrieval-note"><b>Policy evidence selected from ${result.retrieval.candidateCount} clause${result.retrieval.candidateCount === 1 ? "" : "s"}</b><span>${escapeHtml(result.retrieval.selectedClause)}</span><small>Legal-BERT and lexical overlap ranked ${result.retrieval.consideredCount} candidate${result.retrieval.consideredCount === 1 ? "" : "s"}; explicit constraints determine the verdict.</small></div>` : ""}`;
+}
+
+function renderModelSignal(signal, scoreLabel = "Semantic similarity") {
+  if (!signal) return `<div class="model-signal inactive"><b>Deterministic browser engine</b><span>Legal-BERT was not used for this result.</span></div>`;
+  const active = signal.state === "active";
+  const score = signal.cosineSimilarity == null ? "" : `<strong>${scoreLabel}: ${Math.round(signal.cosineSimilarity * 100)}% cosine</strong>`;
+  return `<div class="model-signal ${active ? "active" : "inactive"}"><b>${active ? "LEGAL-BERT ACTIVE" : "RULE BASELINE"}</b><span>${escapeHtml(signal.detail)}</span>${score}<small>${active ? "Raw embedding similarity is not a probability or a compliance verdict." : "No neural model contributed to this result."}</small></div>`;
 }
 
 async function runComparison(notify = true) {
   const regulatoryText = $("#requirement-input").value.trim();
   const policyText = $("#policy-input").value.trim();
   if (!regulatoryText || !policyText) return toast("Provide both regulatory and policy text before comparing.", "Input needed");
+  const button = $("#compare-button");
+  button.disabled = true;
   try {
     state.comparison = await executeWithFallback(
       "/api/compare",
@@ -414,11 +425,14 @@ async function runComparison(notify = true) {
       () => comparePolicy(regulatoryText, policyText),
       "Policy comparison",
       notify,
+      60000,
     );
     renderComparison();
     if (notify) toast(`Outcome: ${state.comparison.outcome.replaceAll("_", " ").toLowerCase()}.`, "Comparison complete");
   } catch (error) {
     toast(error.message, "Comparison failed");
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -432,14 +446,17 @@ function renderChanges() {
     <article class="impact-card"><span>Critical changes</span><b>${result.criticalCount}</b><small>review before effective date</small></article>
     <article class="impact-card"><span>Existing clauses affected</span><b>${result.affectedObligations}</b><small>modified or removed clauses</small></article>
   </div>
+  ${renderModelSignal(result.modelSignal, "Clause similarity")}
   <p class="change-interpretation">Possible reasons are inferred from the wording. Confirm the regulator's intent with official explanatory material.</p>
-  <div class="change-list">${result.changes.length ? result.changes.map((change) => `<article class="change-item"><span class="change-kind ${change.type}">${change.type}</span><div class="change-text">${change.before ? `<del>− ${escapeHtml(change.before)}</del>` : ""}${change.after ? `<ins>+ ${escapeHtml(change.after)}</ins>` : ""}${change.explanation ? `<div class="change-explanation"><div class="change-explanation-head"><b>Why this may have changed</b><span class="rationale-status ${change.explanation.status}">${change.explanation.status === "INFERRED_FROM_TEXT" ? "TEXTUAL INFERENCE" : "REASON UNKNOWN"}</span></div><dl><div><dt>Observed</dt><dd>${escapeHtml(change.explanation.observed)}</dd></div><div><dt>Possible rationale</dt><dd>${escapeHtml(change.explanation.possibleRationale)}</dd></div><div><dt>Action to review</dt><dd>${escapeHtml(change.explanation.operationalImpact)}</dd></div></dl></div>` : ""}</div><span class="severity ${change.severity}">${change.severity}</span></article>`).join("") : `<p class="change-empty">No changed clauses were detected between these versions.</p>`}</div>`;
+  <div class="change-list">${result.changes.length ? result.changes.map((change) => `<article class="change-item"><span class="change-kind ${change.type}">${change.type}</span><div class="change-text">${change.before ? `<del>− ${escapeHtml(change.before)}</del>` : ""}${change.after ? `<ins>+ ${escapeHtml(change.after)}</ins>` : ""}${change.semanticSimilarity != null ? `<p class="alignment-note">${change.alignmentMethod === "legal-bert" ? "LEGAL-BERT ALIGNMENT" : "LEXICAL ALIGNMENT"} · Legal-BERT cosine ${Math.round(change.semanticSimilarity * 100)}%</p>` : ""}${change.explanation ? `<div class="change-explanation"><div class="change-explanation-head"><b>Why this may have changed</b><span class="rationale-status ${change.explanation.status}">${change.explanation.status === "INFERRED_FROM_TEXT" ? "TEXTUAL INFERENCE" : "REASON UNKNOWN"}</span></div><dl><div><dt>Observed</dt><dd>${escapeHtml(change.explanation.observed)}</dd></div><div><dt>Possible rationale</dt><dd>${escapeHtml(change.explanation.possibleRationale)}</dd></div><div><dt>Action to review</dt><dd>${escapeHtml(change.explanation.operationalImpact)}</dd></div></dl></div>` : ""}</div><span class="severity ${change.severity}">${change.severity}</span></article>`).join("") : `<p class="change-empty">No changed clauses were detected between these versions.</p>`}</div>`;
 }
 
 async function runDiff(notify = true) {
   const oldText = $("#old-version").value.trim();
   const newText = $("#new-version").value.trim();
   if (!oldText || !newText) return toast("Provide both versions before running Change Radar.", "Input needed");
+  const button = $("#diff-button");
+  button.disabled = true;
   try {
     state.changes = await executeWithFallback(
       "/api/versions/compare",
@@ -447,11 +464,14 @@ async function runDiff(notify = true) {
       () => compareVersions(oldText, newText),
       "Version comparison",
       notify,
+      60000,
     );
     renderChanges();
     if (notify) toast(`${state.changes.changes.length} material changes routed for review.`, "Radar complete");
   } catch (error) {
     toast(error.message, "Change analysis failed");
+  } finally {
+    button.disabled = false;
   }
 }
 

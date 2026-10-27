@@ -17,17 +17,20 @@ GDPR = (
 @pytest.fixture(autouse=True)
 def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setenv("REGULATRACE_DB_PATH", str(tmp_path / "regulatrace-test.db"))
+    monkeypatch.setenv("REGULATRACE_LEGALBERT", "off")
 
 
 def test_health_exposes_engine_version() -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert {key: value for key, value in payload.items() if key != "legalBert"} == {
         "status": "ok",
         "service": "regulatrace-api",
         "phase": "presentation-edition",
         "engineVersion": "0.4.0-research",
     }
+    assert payload["legalBert"]["state"] == "disabled"
 
 
 def test_openapi_documentation_exposes_all_phase_one_routes() -> None:
@@ -73,6 +76,44 @@ def test_compare_flags_slower_policy_deadline() -> None:
     payload = response.json()
     assert payload["outcome"] == "POTENTIAL_MISMATCH"
     assert next(item for item in payload["dimensions"] if item["id"] == "timing")["score"] < 1
+    assert payload["modelSignal"]["state"] == "disabled"
+
+
+def test_legal_bert_signal_is_reported_without_overriding_deadline_gate(monkeypatch) -> None:
+    from backend import hybrid
+
+    monkeypatch.setattr(hybrid.legalbert, "model_status", lambda: {"ready": True, "state": "ready", "modelId": "test-legal-bert", "detail": "test"})
+    monkeypatch.setattr(hybrid.legalbert, "similarity_matrix", lambda left, right: [[0.98]])
+    response = client.post(
+        "/api/compare",
+        json={
+            "regulatoryText": "The controller shall notify the authority within 72 hours after awareness.",
+            "policyText": "The controller shall notify the authority within 96 hours after awareness.",
+        },
+    )
+    payload = response.json()
+    assert payload["modelSignal"]["state"] == "active"
+    assert payload["modelSignal"]["cosineSimilarity"] == 0.98
+    assert payload["outcome"] == "POTENTIAL_MISMATCH"
+
+
+def test_legal_bert_retrieves_relevant_clause_from_longer_policy(monkeypatch) -> None:
+    from backend import hybrid
+
+    monkeypatch.setattr(hybrid.legalbert, "model_status", lambda: {"ready": True, "state": "ready", "modelId": "test-legal-bert", "detail": "test"})
+    monkeypatch.setattr(hybrid.legalbert, "similarity_matrix", lambda left, right: [[0.95 if "notify" in text else 0.2 for text in right]])
+    response = client.post(
+        "/api/compare",
+        json={
+            "regulatoryText": "The controller shall notify the authority within 72 hours after awareness.",
+            "policyText": "The controller shall retain incident records for seven years. The controller shall notify the authority within 48 hours after awareness.",
+        },
+    )
+    payload = response.json()
+    assert payload["retrieval"]["candidateCount"] == 2
+    assert payload["retrieval"]["selectedIndex"] == 1
+    assert "notify" in payload["policy"]["evidence"]
+    assert payload["modelSignal"]["state"] == "active"
 
 
 def test_version_compare_detects_modified_and_added_clauses() -> None:
@@ -88,6 +129,40 @@ def test_version_compare_detects_modified_and_added_clauses() -> None:
     assert any(change["type"] == "MODIFIED" for change in payload["changes"])
     assert any(change["type"] == "ADDED" for change in payload["changes"])
     assert payload["criticalCount"] >= 1
+
+
+def test_legal_bert_can_align_a_paraphrased_clause(monkeypatch) -> None:
+    from backend import hybrid
+
+    monkeypatch.setattr(hybrid.legalbert, "model_status", lambda: {"ready": True, "state": "ready", "modelId": "test-legal-bert", "detail": "test"})
+    monkeypatch.setattr(hybrid.legalbert, "similarity_matrix", lambda left, right: [[0.8784]])
+    response = client.post(
+        "/api/versions/compare",
+        json={
+            "oldText": "The organization shall review privileged user accounts at least once every 90 days.",
+            "newText": "The organization must inspect privileged access every 60 days.",
+        },
+    )
+    payload = response.json()
+    assert payload["modelSignal"]["state"] == "active"
+    assert payload["changes"][0]["type"] == "MODIFIED"
+    assert payload["changes"][0]["alignmentMethod"] == "legal-bert"
+    assert payload["changes"][0]["semanticSimilarity"] == 0.8784
+
+
+def test_low_semantic_similarity_does_not_force_a_match(monkeypatch) -> None:
+    from backend import hybrid
+
+    monkeypatch.setattr(hybrid.legalbert, "model_status", lambda: {"ready": True, "state": "ready", "modelId": "test-legal-bert", "detail": "test"})
+    monkeypatch.setattr(hybrid.legalbert, "similarity_matrix", lambda left, right: [[0.38]])
+    response = client.post(
+        "/api/versions/compare",
+        json={
+            "oldText": "The organization shall review privileged user accounts at least once every 90 days.",
+            "newText": "The organization must inspect privileged access every 60 days.",
+        },
+    )
+    assert {change["type"] for change in response.json()["changes"]} == {"ADDED", "REMOVED"}
 
 
 def test_change_rationale_distinguishes_observation_from_inference() -> None:
